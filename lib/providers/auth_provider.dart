@@ -60,14 +60,6 @@ class AuthProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  static bool _isValidPassword(String password) {
-    if (password.length < 8) return false;
-    if (!password.contains(RegExp(r'[A-Z]'))) return false;
-    if (!password.contains(RegExp(r'[a-z]'))) return false;
-    if (!password.contains(RegExp(r'[0-9]'))) return false;
-    return true;
-  }
-
   static String? validatePassword(String password) {
     if (password.length < 8) return 'Password must be at least 8 characters';
     if (!password.contains(RegExp(r'[A-Z]'))) return 'Password must contain an uppercase letter';
@@ -77,9 +69,8 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> signIn(String email, String pass) async {
-    if (!_isValidPassword(pass)) {
-      throw Exception('Password must be at least 8 characters with uppercase, lowercase, and number');
-    }
+    final passwordError = validatePassword(pass);
+    if (passwordError != null) throw Exception(passwordError);
     _isLoading = true;
     notifyListeners();
     try {

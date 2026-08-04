@@ -115,7 +115,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       navigator.pushReplacementNamed('/cart/receipt');
     } else {
       ToastProvider.of(context).show('Order Placed Successfully!', ToastType.success);
-      navigator.pushReplacementNamed('/');
+      navigator.pushReplacementNamed('/home');
     }
   }
 

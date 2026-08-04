@@ -48,7 +48,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
         );
   }
 
-  List<String> get _images => [_product.image, _product.image, _product.image];
+  List<String> get _images => [
+        _product.image,
+        _product.image.replaceAll('.png', '_angle.png'),
+        _product.image.replaceAll('.png', '_detail.png'),
+      ];
 
   @override
   void initState() {

@@ -31,7 +31,7 @@ class _SplashScreenState extends State<SplashScreen>
     _scaleAnim = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const _SpringCurve(friction: 6),
+        curve: const _SpringCurve(),
       ),
     );
     _controller.forward();
@@ -180,8 +180,7 @@ class _SplashScreenState extends State<SplashScreen>
 }
 
 class _SpringCurve extends Curve {
-  final double friction;
-  const _SpringCurve({this.friction = 6});
+  const _SpringCurve();
   @override
   double transformInternal(double t) {
     const b = 0.1;

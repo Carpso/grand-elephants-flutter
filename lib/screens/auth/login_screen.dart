@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/auth_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:sell_on_app/utils/validators.dart';
 import 'package:sell_on_app/utils/spring_curve.dart';
 import 'package:sell_on_app/widgets/logo.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
@@ -72,9 +73,7 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  bool _isValidEmail(String email) {
-    return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email);
-  }
+  bool _isValidEmail(String email) => isValidEmail(email);
 
   void _handleForgotPassword() {
     final email = _emailController.text.trim();

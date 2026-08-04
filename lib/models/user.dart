@@ -1,11 +1,3 @@
-enum UserRole {
-  user,
-  rider,
-  admin,
-  superadmin,
-  employee,
-}
-
 class RiderLocation {
   final double lat;
   final double lng;

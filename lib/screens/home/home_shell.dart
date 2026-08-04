@@ -59,13 +59,19 @@ class _HomeShellState extends State<HomeShell> {
   int _currentIndex = 0;
 
   @override
-  Widget build(BuildContext context) {
-    final role = context.watch<AuthProvider>().role;
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final role = context.read<AuthProvider>().role;
     final configs = _roleTabs[role] ?? _roleTabs['user']!;
-
     if (_currentIndex >= configs.length) {
       _currentIndex = 0;
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final role = context.watch<AuthProvider>().role;
+    final configs = _roleTabs[role] ?? _roleTabs['user']!;
 
     final isTablet = MediaQuery.of(context).size.width >= 600;
 

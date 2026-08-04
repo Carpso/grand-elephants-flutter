@@ -29,27 +29,3 @@ class Skeleton extends StatelessWidget {
     );
   }
 }
-
-class SkeletonGroup extends StatelessWidget {
-  final int count;
-  final double itemHeight;
-
-  const SkeletonGroup({
-    super.key,
-    this.count = 3,
-    this.itemHeight = 60,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: List.generate(
-        count,
-        (i) => Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Skeleton(height: itemHeight),
-        ),
-      ),
-    );
-  }
-}

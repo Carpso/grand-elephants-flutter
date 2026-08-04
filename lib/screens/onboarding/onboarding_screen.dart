@@ -75,7 +75,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<void> _finishOnboarding() async {
     try {
       await StorageService.save('hasOnboarded', true);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Onboarding save error: $e');
+    }
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed('/login');
   }
@@ -226,7 +228,7 @@ class _SlideContentState extends State<_SlideContent>
     ).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const _SpringCurve(damping: 15),
+        curve: const _SpringCurve(),
       ),
     );
     _controller.forward();
@@ -315,8 +317,7 @@ class _SlideContentState extends State<_SlideContent>
 }
 
 class _SpringCurve extends Curve {
-  final double damping;
-  const _SpringCurve({this.damping = 15});
+  const _SpringCurve();
   @override
   double transformInternal(double t) {
     const b = 0.1;

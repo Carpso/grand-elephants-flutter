@@ -35,7 +35,9 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               .toList();
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Fetch orders error: $e');
+    }
   }
 
   Future<void> _updateOrderStatus(String orderId, String newStatus) async {

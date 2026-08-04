@@ -112,7 +112,7 @@ class ConfigProvider extends ChangeNotifier {
     _exchangeRateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       final fluctuation = (Random().nextDouble() - 0.5) * 0.0005;
       _exchangeRate = double.parse((_exchangeRate + fluctuation).toStringAsFixed(5));
-      notifyListeners();
+      if (_currency == 'USD') notifyListeners();
     });
   }
 
