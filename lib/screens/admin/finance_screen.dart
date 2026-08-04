@@ -3,6 +3,7 @@ import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class FinanceScreen extends StatefulWidget {
   const FinanceScreen({super.key});
@@ -25,9 +26,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
   }
 
   void _handleSaveRates() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('New financial configurations have been applied globally.')),
-    );
+    ToastProvider.of(context).show('New financial configurations have been applied globally.', ToastType.success);
   }
 
   @override

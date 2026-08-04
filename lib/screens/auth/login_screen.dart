@@ -101,15 +101,6 @@ class _LoginScreenState extends State<LoginScreen>
   Future<void> _handleLogin(String? role) async {
     if (_isLoading) return;
 
-    if (role != null) {
-      setState(() => _isLoading = true);
-      final auth = context.read<AuthProvider>();
-      await auth.login(role: role);
-      if (!mounted) return;
-      Navigator.of(context).pushReplacementNamed('/home');
-      return;
-    }
-
     final email = _emailController.text.trim();
     final password = _passwordController.text;
 

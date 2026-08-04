@@ -5,6 +5,7 @@ import 'package:sell_on_app/providers/auth_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class ApplyScreen extends StatefulWidget {
   const ApplyScreen({super.key});
@@ -30,9 +31,7 @@ class _ApplyScreenState extends State<ApplyScreen> {
   }
 
   void _pickImage() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Simulating Photo Upload...')),
-    );
+    ToastProvider.of(context).show('Simulating Photo Upload...', ToastType.info);
     setState(() {
       _bikePhoto = 'https://placehold.co/400x300/D4AF37/white?text=Bike+Photo';
     });
@@ -43,9 +42,7 @@ class _ApplyScreenState extends State<ApplyScreen> {
         _plateNumberCtrl.text.isEmpty ||
         _licenseNumberCtrl.text.isEmpty ||
         _bikePhoto == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in ALL details including Plate Number and Bike Photo')),
-      );
+      ToastProvider.of(context).show('Please fill in ALL details including Plate Number and Bike Photo', ToastType.error);
       return;
     }
     context.read<AuthProvider>().requestRiderAccess({

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class EmployeesScreen extends StatefulWidget {
   const EmployeesScreen({super.key});
@@ -62,7 +63,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                 });
               });
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rider approved and added to the team.')));
+              ToastProvider.of(context).show('Rider approved and added to the team.', ToastType.success);
             },
             child: const Text('Approve'),
           ),

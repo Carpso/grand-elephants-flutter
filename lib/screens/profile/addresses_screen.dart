@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class _Address {
   final String id;
@@ -286,9 +287,7 @@ class _AddressModalState extends State<_AddressModal> {
 
   void _save() {
     if (_titleController.text.isEmpty || _detailsController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
-      );
+      ToastProvider.of(context).show('Please fill all fields', ToastType.error);
       return;
     }
     widget.onSave(_Address(

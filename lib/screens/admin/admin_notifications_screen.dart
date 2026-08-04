@@ -3,6 +3,7 @@ import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class AdminNotificationsScreen extends StatefulWidget {
   const AdminNotificationsScreen({super.key});
@@ -26,9 +27,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
 
   void _handleSend() {
     if (_titleController.text.isEmpty || _bodyController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter both a title and a message body.')),
-      );
+      ToastProvider.of(context).show('Please enter both a title and a message body.', ToastType.error);
       return;
     }
 
@@ -37,9 +36,7 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
       if (mounted) {
         setState(() => _sending = false);
         final targetLabel = _target == 'all' ? 'All Users' : _target == 'riders' ? 'Riders' : 'Customers';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Message "${_titleController.text}" has been queued for $targetLabel.')),
-        );
+        ToastProvider.of(context).show('Message "${_titleController.text}" has been queued for $targetLabel.', ToastType.success);
         _titleController.clear();
         _bodyController.clear();
       }

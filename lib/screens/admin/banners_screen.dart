@@ -4,6 +4,7 @@ import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class BannersScreen extends StatefulWidget {
   const BannersScreen({super.key});
@@ -27,7 +28,7 @@ class _BannersScreenState extends State<BannersScreen> {
 
   void _handleCreate() {
     if (_titleController.text.isEmpty || _subtitleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill in Title and Subtitle')));
+      ToastProvider.of(context).show('Please fill in Title and Subtitle', ToastType.error);
       return;
     }
     context.read<ConfigProvider>().addBanner({
@@ -38,7 +39,7 @@ class _BannersScreenState extends State<BannersScreen> {
     });
     _titleController.clear();
     _subtitleController.clear();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Banner added to Home Screen')));
+    ToastProvider.of(context).show('Banner added to Home Screen', ToastType.success);
   }
 
   @override

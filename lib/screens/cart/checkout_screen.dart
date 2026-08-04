@@ -7,6 +7,7 @@ import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/providers/cart_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 enum _PaymentMethod { momo, card }
 
@@ -76,42 +77,31 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _handlePayment() async {
     final cart = context.read<CartProvider>();
     if (cart.items.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Your cart is empty!')),
-      );
+      ToastProvider.of(context).show('Your cart is empty!', ToastType.error);
       return;
     }
 
     if (_paymentMethod == _PaymentMethod.momo && _phoneController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your phone number')),
-      );
+      ToastProvider.of(context).show('Please enter your phone number', ToastType.error);
       return;
     }
 
     if (_paymentMethod == _PaymentMethod.card) {
       if (_validateCardNumber(_cardNumberController.text) != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid card number')),
-        );
+        ToastProvider.of(context).show('Please enter a valid card number', ToastType.error);
         return;
       }
       if (_validateExpiry(_expiryController.text) != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid expiry date')),
-        );
+        ToastProvider.of(context).show('Please enter a valid expiry date', ToastType.error);
         return;
       }
       if (_validateCvc(_cvcController.text) != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please enter a valid CVC')),
-        );
+        ToastProvider.of(context).show('Please enter a valid CVC', ToastType.error);
         return;
       }
     }
 
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
 
     setState(() => _isProcessing = true);
     await Future.delayed(const Duration(seconds: 2));
@@ -124,9 +114,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (_needTaxInvoice) {
       navigator.pushReplacementNamed('/cart/receipt');
     } else {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Order Placed Successfully!')),
-      );
+      ToastProvider.of(context).show('Order Placed Successfully!', ToastType.success);
       navigator.pushReplacementNamed('/');
     }
   }

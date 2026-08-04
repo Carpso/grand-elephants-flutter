@@ -26,7 +26,7 @@ class PaymentService {
         body: jsonEncode({
           'amount': (totalAmount * 100).toInt(),
           'email': userEmail,
-          'reference': 'tx_${DateTime.now().millisecondsSinceEpoch}_${UniqueKey().hashCode.toRadixString(36)}',
+          'reference': 'tx_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}',
           'currency': 'ZMW',
           'channels': ['card', 'mobile_money', 'ussd', 'bank_transfer'],
           'metadata': {
@@ -63,7 +63,7 @@ class PaymentService {
           'account_name': 'Client App Admin Payout',
           'bank_code': network,
           'currency': 'ZMW',
-          'reference': 'payout_${DateTime.now().millisecondsSinceEpoch}_${UniqueKey().hashCode.toRadixString(36)}',
+          'reference': 'payout_${DateTime.now().millisecondsSinceEpoch}_${DateTime.now().microsecondsSinceEpoch.toRadixString(36)}',
           'metadata': {
             'tenant_id': tenantId,
             'note': 'Revenue share payout minus 5% app fees',

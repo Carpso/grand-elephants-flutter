@@ -5,6 +5,7 @@ import 'package:sell_on_app/models/business_collection_number.dart';
 import 'package:sell_on_app/providers/collection_number_provider.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class CollectionNumbersScreen extends StatefulWidget {
   const CollectionNumbersScreen({super.key});
@@ -337,11 +338,7 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
                       onPressed: () async {
                         if (nameController.text.isEmpty ||
                             phoneController.text.isEmpty) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(
-                            const SnackBar(
-                                content: Text(
-                                    'Business name and phone are required')),
-                          );
+                          ToastProvider.of(ctx).show('Business name and phone are required', ToastType.error);
                           return;
                         }
 

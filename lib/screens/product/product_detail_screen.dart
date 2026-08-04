@@ -6,6 +6,7 @@ import 'package:sell_on_app/providers/cart_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/price_tag.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final String productId;
@@ -96,25 +97,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
 
   void _handleAddToCart() {
     context.read<CartProvider>().addToCart(_product);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Added to Cart!'),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(16)),
-        ),
-      ),
-    );
+    ToastProvider.of(context).show('Added to Cart!', ToastType.success);
   }
 
   void _handleAddReview() {
     if (_reviewController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please write a comment'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ToastProvider.of(context).show('Please write a comment', ToastType.error);
       return;
     }
     setState(() {

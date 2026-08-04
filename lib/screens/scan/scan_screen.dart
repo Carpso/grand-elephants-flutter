@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -35,14 +36,7 @@ class _ScanScreenState extends State<ScanScreen> {
   void _handleBarCodeScanned(Map<String, dynamic> result) {
     if (_scanned) return;
     setState(() => _scanned = true);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Bar code with type ${result['type']} and data ${result['data']} has been scanned!',
-        ),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    ToastProvider.of(context).show('Bar code with type ${result['type']} and data ${result['data']} has been scanned!', ToastType.info);
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) setState(() => _scanned = false);
     });

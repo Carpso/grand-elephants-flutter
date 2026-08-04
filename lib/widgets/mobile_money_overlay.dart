@@ -4,6 +4,7 @@ import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/collection_number_provider.dart';
 import 'package:sell_on_app/services/lipila_payment_service.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class MobileMoneyOverlay extends StatefulWidget {
   final bool visible;
@@ -55,9 +56,7 @@ class _MobileMoneyOverlayState extends State<MobileMoneyOverlay> {
 
   Future<void> _handlePay() async {
     if (_phoneController.text.length < 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid ZM number.')),
-      );
+      ToastProvider.of(context).show('Please enter a valid ZM number.', ToastType.error);
       return;
     }
 
@@ -100,9 +99,7 @@ class _MobileMoneyOverlayState extends State<MobileMoneyOverlay> {
           _status = 'idle';
           _errorMessage = result.message;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.message ?? 'Payment failed')),
-        );
+        ToastProvider.of(context).show(result.message ?? 'Payment failed', ToastType.error);
       }
     } catch (e) {
       setState(() {

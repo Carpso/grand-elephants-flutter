@@ -8,6 +8,7 @@ import 'package:sell_on_app/providers/wishlist_provider.dart';
 import 'package:sell_on_app/widgets/price_tag.dart';
 import 'package:sell_on_app/widgets/skeleton.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -124,6 +125,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -500,16 +502,7 @@ class _ProductGridItemState extends State<_ProductGridItem> {
               GestureDetector(
                 onTap: () {
                   cart.addToCart(widget.product);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('${widget.product.name} added to cart'),
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      duration: const Duration(seconds: 2),
-                    ),
-                  );
+                  ToastProvider.of(context).show('${widget.product.name} added to cart', ToastType.success);
                 },
                 child: Container(
                   padding: const EdgeInsets.all(8),

@@ -6,6 +6,7 @@ import 'package:sell_on_app/widgets/back_button.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -48,15 +49,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         _logoController.text,
       );
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Branding updated successfully!')),
-        );
+        ToastProvider.of(context).show('Branding updated successfully!', ToastType.success);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to update branding')),
-        );
+        ToastProvider.of(context).show('Failed to update branding', ToastType.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -65,6 +62,8 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isTablet = MediaQuery.of(context).size.width >= 600;
+
     return Scaffold(
       appBar: AppBar(title: const Text('System Admin')),
       body: SingleChildScrollView(
@@ -157,11 +156,27 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               ),
             ),
             const SizedBox(height: 24),
-            _buildMenuCard(Icons.people, 'Manage Users', () {}),
-            const SizedBox(height: 12),
-            _buildMenuCard(Icons.settings, 'App Settings', () {}),
-            const SizedBox(height: 12),
-            _buildMenuCard(Icons.security, 'Security Logs', () {}),
+            if (isTablet)
+              GridView.count(
+                crossAxisCount: 2,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                mainAxisSpacing: 12,
+                crossAxisSpacing: 12,
+                childAspectRatio: 3,
+                children: [
+                  _buildMenuCard(Icons.people, 'Manage Users', () {}),
+                  _buildMenuCard(Icons.settings, 'App Settings', () {}),
+                  _buildMenuCard(Icons.security, 'Security Logs', () {}),
+                ],
+              )
+            else ...[
+              _buildMenuCard(Icons.people, 'Manage Users', () {}),
+              const SizedBox(height: 12),
+              _buildMenuCard(Icons.settings, 'App Settings', () {}),
+              const SizedBox(height: 12),
+              _buildMenuCard(Icons.security, 'Security Logs', () {}),
+            ],
           ],
         ),
       ),

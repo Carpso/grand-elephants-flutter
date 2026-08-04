@@ -3,6 +3,7 @@ import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/widgets/price_tag.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final String? orderId;
@@ -30,9 +31,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       _status = 'Assigned';
       _riderModalVisible = false;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$riderName has been assigned to this order.')),
-    );
+    ToastProvider.of(context).show('$riderName has been assigned to this order.', ToastType.success);
   }
 
   void _handleRefund() {

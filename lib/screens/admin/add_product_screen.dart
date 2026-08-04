@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -97,9 +98,7 @@ class _AddProductScreenState extends State<AddProductScreen> with SingleTickerPr
           _processingStep = '';
           _image = uri;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ghost Mannequin Applied - The image has been processed.')),
-        );
+        ToastProvider.of(context).show('Ghost Mannequin Applied - The image has been processed.', ToastType.success);
       }
     });
   }
@@ -110,9 +109,7 @@ class _AddProductScreenState extends State<AddProductScreen> with SingleTickerPr
         _categoryController.text.isEmpty ||
         _descriptionController.text.isEmpty ||
         _image == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all fields and upload an image.')),
-      );
+      ToastProvider.of(context).show('Please fill in all fields and upload an image.', ToastType.error);
       return;
     }
 
@@ -121,9 +118,7 @@ class _AddProductScreenState extends State<AddProductScreen> with SingleTickerPr
     Future.delayed(const Duration(milliseconds: 1500), () {
       if (mounted) {
         setState(() => _loading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Product added successfully to inventory.')),
-        );
+        ToastProvider.of(context).show('Product added successfully to inventory.', ToastType.success);
         Navigator.pop(context);
       }
     });

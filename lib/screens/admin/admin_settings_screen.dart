@@ -5,6 +5,7 @@ import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class AdminSettingsScreen extends StatefulWidget {
   const AdminSettingsScreen({super.key});
@@ -61,24 +62,18 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       );
       config.setTaxRate(double.tryParse(_taxController.text) ?? config.taxRate);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Configuration Saved Successfully')),
-        );
+        ToastProvider.of(context).show('Configuration Saved Successfully', ToastType.success);
         Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to save configuration')),
-        );
+        ToastProvider.of(context).show('Failed to save configuration', ToastType.error);
       }
     }
   }
 
   void _handleBackup() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Backup initiated. You will be notified when complete.')),
-    );
+    ToastProvider.of(context).show('Backup initiated. You will be notified when complete.', ToastType.info);
   }
 
   @override

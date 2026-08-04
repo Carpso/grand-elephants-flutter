@@ -6,6 +6,7 @@ import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/services/storage_service.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class RiderHomeScreen extends StatefulWidget {
   const RiderHomeScreen({super.key});
@@ -54,9 +55,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     await StorageService.save(
         'global_orders', updatedOrders.map((e) => e.toJson()).toList());
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Order updated to $newStatus')),
-      );
+      ToastProvider.of(context).show('Order updated to $newStatus', ToastType.success);
     }
   }
 

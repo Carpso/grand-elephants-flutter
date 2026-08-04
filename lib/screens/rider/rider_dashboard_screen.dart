@@ -6,6 +6,7 @@ import 'package:sell_on_app/providers/auth_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/incoming_order_modal.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class RiderDashboardScreen extends StatefulWidget {
   const RiderDashboardScreen({super.key});
@@ -61,9 +62,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
     });
     _timer?.cancel();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Request Declined - You are now Offline')),
-      );
+      ToastProvider.of(context).show('Request Declined - You are now Offline', ToastType.info);
     }
   }
 
@@ -270,9 +269,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
               variant: SoftButtonVariant.primary,
               onPressed: () {
                 setState(() => _hasActiveOrder = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Great Job! Delivery Completed. +K 45.00')),
-                );
+                ToastProvider.of(context).show('Great Job! Delivery Completed. +K 45.00', ToastType.success);
               },
             ),
           ],

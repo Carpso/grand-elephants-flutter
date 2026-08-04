@@ -4,6 +4,7 @@ import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -26,7 +27,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
 
   void _handleAdd() {
     if (_nameController.text.isEmpty || _iconController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Name and Icon are required')));
+      ToastProvider.of(context).show('Name and Icon are required', ToastType.error);
       return;
     }
     context.read<ConfigProvider>().addCategory(_nameController.text, _iconController.text);

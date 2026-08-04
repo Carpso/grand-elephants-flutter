@@ -6,6 +6,7 @@ import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/price_tag.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class BusinessDashboardScreen extends StatelessWidget {
   const BusinessDashboardScreen({super.key});
@@ -157,9 +158,7 @@ class BusinessDashboardScreen extends StatelessWidget {
                   title: 'Generate Full Report',
                   variant: SoftButtonVariant.outline,
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Exporting PDF...')),
-                    );
+                    ToastProvider.of(context).show('Exporting PDF...', ToastType.info);
                   },
                 ),
               ],

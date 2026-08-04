@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class DeliveryCameraScreen extends StatefulWidget {
   const DeliveryCameraScreen({super.key});
@@ -66,9 +67,7 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
   }
 
   void _confirmDelivery() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Proof of delivery captured! Order Complete.')),
-    );
+    ToastProvider.of(context).show('Proof of delivery captured! Order Complete.', ToastType.success);
     Navigator.of(context).maybePop();
   }
 

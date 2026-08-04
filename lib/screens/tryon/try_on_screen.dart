@@ -4,6 +4,7 @@ import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class TryOnScreen extends StatefulWidget {
   const TryOnScreen({super.key});
@@ -500,12 +501,7 @@ class _TryOnScreenState extends State<TryOnScreen>
                   title: 'Add to Cart',
                   variant: SoftButtonVariant.primary,
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Extracted item added to cart!'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    ToastProvider.of(context).show('Extracted item added to cart!', ToastType.success);
                     Navigator.of(context).pushNamed('/cart/checkout');
                   },
                 ),

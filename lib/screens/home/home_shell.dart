@@ -67,6 +67,15 @@ class _HomeShellState extends State<HomeShell> {
       _currentIndex = 0;
     }
 
+    final isTablet = MediaQuery.of(context).size.width >= 600;
+
+    if (isTablet) {
+      return _buildTabletLayout(configs);
+    }
+    return _buildPhoneLayout(configs);
+  }
+
+  Widget _buildPhoneLayout(List<_TabConfig> configs) {
     final tabs = configs
         .map((c) => BottomNavigationBarItem(
               icon: Icon(c.icon),
@@ -101,6 +110,39 @@ class _HomeShellState extends State<HomeShell> {
             items: tabs,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTabletLayout(List<_TabConfig> configs) {
+    return Scaffold(
+      body: Row(
+        children: [
+          NavigationRail(
+            selectedIndex: _currentIndex,
+            onDestinationSelected: (i) => setState(() => _currentIndex = i),
+            labelType: NavigationRailLabelType.all,
+            selectedIconTheme: const IconThemeData(color: AppColors.brandPrimary),
+            selectedLabelTextStyle: const TextStyle(color: AppColors.brandPrimary, fontWeight: FontWeight.bold),
+            unselectedIconTheme: const IconThemeData(color: AppColors.brandMuted),
+            unselectedLabelTextStyle: TextStyle(color: AppColors.brandMuted),
+            leading: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Icon(Icons.store, size: 32, color: AppColors.brandPrimary),
+            ),
+            destinations: configs
+                .map((c) => NavigationRailDestination(
+                      icon: Icon(c.icon),
+                      selectedIcon: Icon(c.activeIcon),
+                      label: Text(c.label),
+                    ))
+                .toList(),
+          ),
+          const VerticalDivider(width: 1, thickness: 1),
+          Expanded(
+            child: IndexedStack(index: _currentIndex, children: configs.map((c) => c.screen).toList()),
+          ),
+        ],
       ),
     );
   }

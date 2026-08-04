@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/user.dart';
@@ -10,6 +11,9 @@ class AuthProvider extends ChangeNotifier {
   String _role = 'user';
   String _riderStatus = 'none';
   bool _isLoading = true;
+
+  Timer? _sessionTimer;
+  static const _sessionTimeout = Duration(minutes: 30);
 
   User? get user => _user;
   String get role => _role;
@@ -27,12 +31,33 @@ class AuthProvider extends ChangeNotifier {
         _user = User.fromJson(data);
         _role = _user!.role;
         _riderStatus = _user!.riderStatus;
+        _startSessionTimer();
       }
     } catch (e) {
       debugPrint('Auth init error: $e');
     }
     _isLoading = false;
     notifyListeners();
+  }
+
+  void resetSession() {
+    _sessionTimer?.cancel();
+    _startSessionTimer();
+  }
+
+  void _startSessionTimer() {
+    _sessionTimer = Timer(_sessionTimeout, _onSessionExpired);
+  }
+
+  void _onSessionExpired() {
+    debugPrint('Session expired, logging out');
+    logout();
+  }
+
+  @override
+  void dispose() {
+    _sessionTimer?.cancel();
+    super.dispose();
   }
 
   static bool _isValidPassword(String password) {
@@ -70,6 +95,7 @@ class AuthProvider extends ChangeNotifier {
       _user = loggedInUser;
       _role = 'user';
       await StorageService.save(StorageService.keyUser, loggedInUser.toJson());
+      _startSessionTimer();
     } catch (e) {
       _isLoading = false;
       notifyListeners();
@@ -98,11 +124,13 @@ class AuthProvider extends ChangeNotifier {
     _role = 'user';
     await StorageService.save(StorageService.keyUser, newUser.toJson());
     await DatabaseService.syncUser(newUser.toJson());
+    _startSessionTimer();
     _isLoading = false;
     notifyListeners();
   }
 
   Future<void> logout() async {
+    _sessionTimer?.cancel();
     _isLoading = true;
     notifyListeners();
     try {

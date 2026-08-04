@@ -4,6 +4,7 @@ import 'package:sell_on_app/services/storage_service.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class Rider {
   final String id;
@@ -111,9 +112,7 @@ class _RidersScreenState extends State<RidersScreen> {
 
   Future<void> _handleRecruit() async {
     if (_nameController.text.isEmpty || _phoneController.text.isEmpty || _vehicleController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all rider details.')),
-      );
+      ToastProvider.of(context).show('Please fill in all rider details.', ToastType.error);
       return;
     }
 
@@ -136,7 +135,7 @@ class _RidersScreenState extends State<RidersScreen> {
     _phoneController.clear();
     _vehicleController.clear();
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rider recruited successfully!')));
+      ToastProvider.of(context).show('Rider recruited successfully!', ToastType.success);
     }
   }
 
@@ -156,7 +155,7 @@ class _RidersScreenState extends State<RidersScreen> {
               await StorageService.save('admin_riders_list', updatedList.map((e) => e.toJson()).toList());
               Navigator.pop(ctx);
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Payout to ${rider.name} processed.')));
+                ToastProvider.of(context).show('Payout to ${rider.name} processed.', ToastType.success);
               }
             },
             child: const Text('Confirm Pay'),

@@ -9,6 +9,7 @@ import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
 import 'package:sell_on_app/providers/cart_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 enum _DeliveryMethod { standard, express, pickup }
 
@@ -55,9 +56,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _handleCheckout() async {
     if (!_isValid) {
       HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill in all shipping details.')),
-      );
+      ToastProvider.of(context).show('Please fill in all shipping details.', ToastType.error);
       return;
     }
 
@@ -77,9 +76,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       Navigator.pushReplacementNamed(context, '/checkout/success');
     } else {
       HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Payment Failed. Transaction declined. Please try again.')),
-      );
+      ToastProvider.of(context).show('Payment Failed. Transaction declined. Please try again.', ToastType.error);
     }
   }
 

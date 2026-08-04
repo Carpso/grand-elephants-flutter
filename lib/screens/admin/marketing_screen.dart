@@ -4,6 +4,7 @@ import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class MarketingScreen extends StatefulWidget {
   const MarketingScreen({super.key});
@@ -217,9 +218,7 @@ class _MarketingScreenState extends State<MarketingScreen> {
             variant: SoftButtonVariant.primary,
             icon: const Text('\u2B07', style: TextStyle(color: AppColors.white, fontSize: 20)),
             onPressed: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Exporting High-Res PDF...')),
-              );
+              ToastProvider.of(context).show('Exporting High-Res PDF...', ToastType.info);
             },
           ),
         ],
@@ -242,9 +241,7 @@ class _MarketingScreenState extends State<MarketingScreen> {
               ),
               FloatingActionButton.small(
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Opening Composer...')),
-                  );
+                  ToastProvider.of(context).show('Opening Composer...', ToastType.info);
                 },
                 backgroundColor: AppColors.brandPrimary,
                 child: const Icon(Icons.add, color: AppColors.white, size: 20),
