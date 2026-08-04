@@ -32,7 +32,7 @@ class _OrderListScreenState extends State<OrderListScreen> {
                 final order = orders[index];
                 return GestureDetector(
                   onTap: () => Navigator.of(context).pushNamed(
-                    '/orders/detail',
+                    '/orders/${order.id}',
                     arguments: order.id,
                   ),
                   child: SoftCard(

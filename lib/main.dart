@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'constants/app_config.dart';
 import 'constants/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
@@ -18,7 +19,6 @@ import 'screens/home/home_shell.dart';
 import 'screens/product/product_detail_screen.dart';
 import 'screens/cart/checkout_screen.dart' as cart_checkout;
 import 'screens/cart/receipt_screen.dart';
-import 'screens/checkout/checkout_screen.dart' as checkout;
 import 'screens/checkout/success_screen.dart';
 import 'screens/orders/order_tracking_screen.dart';
 import 'screens/orders/order_list_screen.dart';
@@ -72,7 +72,7 @@ class SellOnApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(create: (_) => WishlistProvider()),
         ChangeNotifierProvider(create: (_) => CollectionNumberProvider()),
-        Provider(create: (_) => LipilaPaymentService()..initialize()),
+        Provider(create: (_) => LipilaPaymentService()..initialize(apiKey: AppConfig.lipilaSecretKey, useSandbox: AppConfig.lipilaUseSandbox)),
       ],
       child: MaterialApp(
         title: 'Sell On App',
@@ -98,8 +98,7 @@ class SellOnApp extends StatelessWidget {
             '/orders/track': (_) => const OrderTrackingScreen(),
             '/cart/checkout': (_) => const cart_checkout.CheckoutScreen(),
             '/cart/receipt': (_) => const ReceiptScreen(),
-            '/checkout': (_) => const checkout.CheckoutScreen(),
-            '/checkout/success': (_) => const CheckoutSuccessScreen(),
+            '/cart/checkout/success': (_) => const CheckoutSuccessScreen(),
             '/scan': (_) => const ScanScreen(),
             '/try-on': (_) => const TryOnScreen(),
             '/support': (_) => const ChatScreen(),

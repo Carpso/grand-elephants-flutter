@@ -17,7 +17,6 @@ class AppConfig {
   static const String lipilaBaseUrl = 'https://api.lipila.dev';
   static const String lipilaCallbackUrl =
       'https://api.sellonapp.com/webhook/lipila';
-  static String get lipilaApiKey =>
-      const String.fromEnvironment('LIPILA_API_KEY');
-  static const bool lipilaUseSandbox = bool.fromEnvironment('LIPILA_SANDBOX', defaultValue: false);
+
+  static const bool lipilaUseSandbox = false;
 }

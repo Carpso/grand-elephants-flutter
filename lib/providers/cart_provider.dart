@@ -134,20 +134,45 @@ class CartProvider extends ChangeNotifier {
     await _persistCart();
   }
 
-  Future<void> placeOrder() async {
-    if (_userId == null || _userId!.isEmpty) return;
+  Future<Order?> placeOrder({
+    required String paymentMethod,
+    required String deliveryAddress,
+    required String deliveryMethod,
+    String? customerPhone,
+    String? transactionId,
+    String? referenceId,
+    String? notes,
+  }) async {
+    if (_userId == null || _userId!.isEmpty) return null;
+    if (_items.isEmpty) return null;
+
+    // Generate secure order ID
+    final orderId = _generateOrderId();
+
     final newOrder = Order(
-      id: Random().nextDouble().toString().substring(2, 11).toUpperCase(),
+      id: orderId,
       items: List.from(_items),
+      subtotal: subtotal,
+      deliveryFee: deliveryFee,
       total: total,
       date: DateTime.now().toIso8601String(),
       status: 'Pending',
+      paymentMethod: paymentMethod,
+      paymentStatus: 'pending',
+      transactionId: transactionId,
+      referenceId: referenceId,
+      deliveryAddress: deliveryAddress,
+      deliveryMethod: deliveryMethod,
+      customerPhone: customerPhone,
+      notes: notes,
     );
+
     _orders.insert(0, newOrder);
     _items.clear();
     _isDirty = true;
     await _persistOrders();
     await _persistCart();
+
     try {
       final globalOrders = await StorageService.get<List<dynamic>>('global_orders') ?? [];
       globalOrders.insert(0, newOrder.toJson());
@@ -155,6 +180,63 @@ class CartProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error persisting global orders: $e');
     }
+
     notifyListeners();
+    return newOrder;
+  }
+
+  String _generateOrderId() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final random = Random().nextInt(999999).toString().padLeft(6, '0');
+    return 'ORD-${timestamp.toString().substring(7)}-$random'.toUpperCase();
+  }
+
+  // Admin/rider methods to update order status
+  Future<void> updateOrderStatus(String orderId, String newStatus) async {
+    final index = _orders.indexWhere((o) => o.id == orderId);
+    if (index >= 0 && Order.validStatuses.contains(newStatus)) {
+      _orders[index] = _orders[index].withStatus(newStatus);
+      await _persistOrders();
+      notifyListeners();
+
+      // Also update global orders
+      try {
+        final globalOrders = await StorageService.get<List<dynamic>>('global_orders') ?? [];
+        final globalIndex = globalOrders.indexWhere((o) => o['id'] == orderId);
+        if (globalIndex >= 0) {
+          globalOrders[globalIndex] = _orders[index].toJson();
+          await StorageService.save('global_orders', globalOrders);
+        }
+      } catch (e) {
+        debugPrint('Error updating global order status: $e');
+      }
+    }
+  }
+
+  Future<void> updatePaymentStatus(String orderId, String paymentStatus, {String? transactionId, String? referenceId}) async {
+    final index = _orders.indexWhere((o) => o.id == orderId);
+    if (index >= 0) {
+      // Order model doesn't have a withPaymentStatus method, need to recreate
+      final order = _orders[index];
+      _orders[index] = Order(
+        id: order.id,
+        items: order.items,
+        subtotal: order.subtotal,
+        deliveryFee: order.deliveryFee,
+        total: order.total,
+        date: order.date,
+        status: order.status,
+        paymentMethod: order.paymentMethod,
+        paymentStatus: paymentStatus,
+        transactionId: transactionId ?? order.transactionId,
+        referenceId: referenceId ?? order.referenceId,
+        deliveryAddress: order.deliveryAddress,
+        deliveryMethod: order.deliveryMethod,
+        customerPhone: order.customerPhone,
+        notes: order.notes,
+      );
+      await _persistOrders();
+      notifyListeners();
+    }
   }
 }

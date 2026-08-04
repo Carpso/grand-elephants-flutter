@@ -50,24 +50,87 @@ class CartItem {
 class Order {
   final String id;
   final List<CartItem> items;
+  final double subtotal;
+  final double deliveryFee;
   final double total;
   final String date;
   final String status;
+  final String paymentMethod;
+  final String paymentStatus;
+  final String? transactionId;
+  final String? referenceId;
+  final String deliveryAddress;
+  final String deliveryMethod;
+  final String? customerPhone;
+  final String? notes;
 
   const Order({
     required this.id,
     required this.items,
+    this.subtotal = 0,
+    this.deliveryFee = 0,
     required this.total,
     required this.date,
     required this.status,
+    this.paymentMethod = 'mobile_money',
+    this.paymentStatus = 'pending',
+    this.transactionId,
+    this.referenceId,
+    this.deliveryAddress = '',
+    this.deliveryMethod = 'standard',
+    this.customerPhone,
+    this.notes,
   });
+
+  static const List<String> validStatuses = [
+    'Pending',
+    'Confirmed',
+    'Processing',
+    'Shipped',
+    'Out for Delivery',
+    'Delivered',
+    'Cancelled',
+    'Refunded',
+  ];
+
+  bool get isCancellable => status == 'Pending' || status == 'Confirmed';
+  bool get isDelivered => status == 'Delivered';
+  bool get isCancelled => status == 'Cancelled';
+
+  Order withStatus(String newStatus) => Order(
+        id: id,
+        items: items,
+        subtotal: subtotal,
+        deliveryFee: deliveryFee,
+        total: total,
+        date: date,
+        status: newStatus,
+        paymentMethod: paymentMethod,
+        paymentStatus: paymentStatus,
+        transactionId: transactionId,
+        referenceId: referenceId,
+        deliveryAddress: deliveryAddress,
+        deliveryMethod: deliveryMethod,
+        customerPhone: customerPhone,
+        notes: notes,
+      );
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'items': items.map((e) => e.toJson()).toList(),
+        'subtotal': subtotal,
+        'deliveryFee': deliveryFee,
         'total': total,
         'date': date,
         'status': status,
+        'paymentMethod': paymentMethod,
+        'paymentStatus': paymentStatus,
+        'transactionId': transactionId,
+        'referenceId': referenceId,
+        'deliveryAddress': deliveryAddress,
+        'deliveryMethod': deliveryMethod,
+        'customerPhone': customerPhone,
+        'notes': notes,
       };
 
   factory Order.fromJson(Map<String, dynamic> json) => Order(
@@ -75,8 +138,18 @@ class Order {
         items: (json['items'] as List)
             .map((e) => CartItem.fromJson(e as Map<String, dynamic>))
             .toList(),
+        subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
+        deliveryFee: (json['deliveryFee'] as num?)?.toDouble() ?? 0,
         total: (json['total'] as num).toDouble(),
         date: json['date'] as String,
         status: json['status'] as String,
+        paymentMethod: json['paymentMethod'] as String? ?? 'mobile_money',
+        paymentStatus: json['paymentStatus'] as String? ?? 'pending',
+        transactionId: json['transactionId'] as String?,
+        referenceId: json['referenceId'] as String?,
+        deliveryAddress: json['deliveryAddress'] as String? ?? '',
+        deliveryMethod: json['deliveryMethod'] as String? ?? 'standard',
+        customerPhone: json['customerPhone'] as String?,
+        notes: json['notes'] as String?,
       );
 }

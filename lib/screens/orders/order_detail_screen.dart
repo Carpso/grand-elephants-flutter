@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/models/cart_item.dart';
+import 'package:sell_on_app/models/product.dart';
 import 'package:sell_on_app/providers/cart_provider.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 
@@ -15,32 +17,23 @@ class OrderDetailScreen extends StatefulWidget {
 }
 
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
-  static const _mockShippingAddress = '123 Independence Avenue, Lusaka, Zambia';
-  static const _mockPaymentMethod = 'Airtel Money (*** 1234)';
-
   @override
   Widget build(BuildContext context) {
     final orderId = ModalRoute.of(context)?.settings.arguments as String? ?? '';
     final cart = context.watch<CartProvider>();
-    final realOrder = cart.orders.where((o) => o.id == orderId).firstOrNull;
+    final order = cart.orders.where((o) => o.id == orderId).firstOrNull;
 
-    final displayId = realOrder?.id ?? 'ORD-2023-8821';
-    final displayDate = realOrder?.date ?? 'Dec 12, 2023, 10:30 AM';
-    final displayStatus = realOrder?.status ?? 'Delivered';
-    final displayTotal = realOrder?.total ?? 5300.0;
+    final displayId = order?.id ?? orderId;
+    final displayDate = order?.date ?? '';
+    final displayStatus = order?.status ?? 'Unknown';
+    final displayTotal = order?.total ?? 0;
 
-    final items = realOrder?.items ?? [
-      CartItem(id: '1', name: 'Royal Gold Handbag', price: 3500, image: 'assets/products/luxury_handbag_gold_1765539658142.png'),
-      CartItem(id: '2', name: 'Chic Beige Tote', price: 1800, image: 'assets/products/chic_tote_bag_beige_1765539674873.png'),
-    ];
-
-    final shippingAddress = realOrder != null ? 'Standard Delivery Address' : _mockShippingAddress;
-    final paymentMethod = realOrder != null ? 'Online Payment' : _mockPaymentMethod;
+    final items = order?.items ?? [];
 
     return Scaffold(
       backgroundColor: AppColors.softSurface,
       appBar: AppBar(
-        title: Text('Order #$orderId'),
+        title: Text('Order #$displayId'),
         backgroundColor: const Color(0xFFE0E5EC),
         foregroundColor: AppColors.brandDark,
         elevation: 0,
@@ -63,37 +56,53 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
             const SizedBox(height: 16),
             ...items.asMap().entries.map((entry) => _buildItemCard(entry.value, entry.key)),
             const SizedBox(height: 16),
-            _buildInfoRow(shippingAddress, paymentMethod),
+            if (order != null) _buildInfoRow(order.deliveryAddress, order.paymentMethod),
             const SizedBox(height: 24),
             _buildSummary(displayTotal),
             const SizedBox(height: 24),
+            if (order != null && order.isCancellable)
+              SoftButton(
+                title: 'Cancel Order',
+                variant: SoftButtonVariant.outline,
+                onPressed: () {
+                  HapticFeedback.heavyImpact();
+                  cart.updateOrderStatus(orderId, 'Cancelled');
+                  ToastProvider.of(context).show('Order cancelled', ToastType.info);
+                  Navigator.pop(context);
+                },
+              ),
+            const SizedBox(height: 12),
             SoftButton(
               title: 'Buy Again',
               variant: SoftButtonVariant.primary,
               onPressed: () {
                 HapticFeedback.heavyImpact();
-                showDialog(
-                  context: context,
-                  builder: (_) => const AlertDialog(
-                    title: Text('Reorder Initiated'),
-                    content: Text('Items have been added to your cart.'),
-                  ),
-                );
+                for (final item in items) {
+                  cart.addToCartWithQuantity(
+                    Product(
+                      id: item.id,
+                      name: item.name,
+                      price: item.price,
+                      image: item.image,
+                      description: '',
+                      category: '',
+                      isGhost: false,
+                    ),
+                    quantity: item.quantity,
+                  );
+                }
+                  ToastProvider.of(context).show('${items.length} item(s) added to cart', ToastType.success);
+                  Navigator.pop(context);
               },
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
             SoftButton(
               title: 'Download Invoice',
               variant: SoftButtonVariant.secondary,
               icon: const Icon(Icons.file_download, size: 20, color: AppColors.brandPrimary),
               onPressed: () {
-                showDialog(
-                  context: context,
-                  builder: (_) => const AlertDialog(
-                    title: Text('Download'),
-                    content: Text('Invoice PDF downloading...'),
-                  ),
-                );
+                HapticFeedback.mediumImpact();
+                ToastProvider.of(context).show('Invoice downloading...', ToastType.info);
               },
             ),
             const SizedBox(height: 32),
@@ -250,7 +259,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  shipping,
+                  shipping.isEmpty ? 'No address provided' : shipping,
                   style: const TextStyle(
                     fontSize: 12,
                     color: Color(0xFF6B7280),
@@ -304,25 +313,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 style: TextStyle(color: Color(0xFF6B7280)),
               ),
               Text(
-                'K ${(total - 50).toStringAsFixed(2)}',
+                'K ${total.toStringAsFixed(2)}',
                 style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF1F2937),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Shipping',
-                style: TextStyle(color: Color(0xFF6B7280)),
-              ),
-              const Text(
-                'K 50.00',
-                style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF1F2937),
                 ),

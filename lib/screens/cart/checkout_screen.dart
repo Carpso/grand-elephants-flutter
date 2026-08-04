@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/widgets/soft_button.dart';
-import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/providers/cart_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:sell_on_app/providers/auth_provider.dart';
+import 'package:sell_on_app/services/lipila_payment_service.dart';
+import 'package:sell_on_app/providers/collection_number_provider.dart';
+import 'package:sell_on_app/widgets/soft_button.dart';
+import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/toast.dart';
 
 enum _PaymentMethod { momo, card }
@@ -48,13 +51,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     context.read<CartProvider>().setDeliveryDistance(km.toDouble());
   }
 
-  String? _validatePhone(String? value) {
-    if (value == null || value.isEmpty) return 'Phone number is required';
-    final cleaned = value.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleaned.length < 10) return 'Phone number must be at least 10 digits';
-    return null;
-  }
-
   String? _validateCardNumber(String? value) {
     if (value == null || value.isEmpty) return 'Card number is required';
     final cleaned = value.replaceAll(RegExp(r'[^0-9]'), '');
@@ -76,6 +72,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   Future<void> _handlePayment() async {
     final cart = context.read<CartProvider>();
+    final lipila = context.read<LipilaPaymentService>();
+    final collectionProvider = context.read<CollectionNumberProvider>();
+
     if (cart.items.isEmpty) {
       ToastProvider.of(context).show('Your cart is empty!', ToastType.error);
       return;
@@ -101,21 +100,69 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
     }
 
-    final navigator = Navigator.of(context);
-
     setState(() => _isProcessing = true);
-    await Future.delayed(const Duration(seconds: 2));
-    if (!mounted) return;
 
-    setState(() => _isProcessing = false);
-    await cart.placeOrder();
-    HapticFeedback.mediumImpact();
+    String? transactionId;
+    String? referenceId;
 
-    if (_needTaxInvoice) {
-      navigator.pushReplacementNamed('/cart/receipt');
-    } else {
-      ToastProvider.of(context).show('Order Placed Successfully!', ToastType.success);
-      navigator.pushReplacementNamed('/home');
+    try {
+      if (_paymentMethod == _PaymentMethod.momo) {
+        final collectionNumber = collectionProvider.getDefaultNumber();
+        if (collectionNumber == null) {
+          ToastProvider.of(context).show('No collection number configured. Contact support.', ToastType.error);
+          setState(() => _isProcessing = false);
+          return;
+        }
+
+        final result = await lipila.collectMobileMoney(
+          amount: cart.total,
+          customerPhone: _phoneController.text,
+          orderReference: 'ORD-${DateTime.now().millisecondsSinceEpoch}',
+          collectionNumber: collectionNumber,
+        );
+
+        if (result.success) {
+          transactionId = result.transactionId;
+          referenceId = result.referenceId;
+        } else {
+          ToastProvider.of(context).show(result.message ?? 'Payment failed', ToastType.error);
+          setState(() => _isProcessing = false);
+          return;
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() => _isProcessing = false);
+
+      final order = await cart.placeOrder(
+        paymentMethod: _paymentMethod == _PaymentMethod.momo ? 'mobile_money' : 'card',
+        deliveryAddress: _addressController.text,
+        deliveryMethod: 'standard',
+        customerPhone: _phoneController.text.isNotEmpty ? _phoneController.text : null,
+        transactionId: transactionId,
+        referenceId: referenceId,
+      );
+
+      if (!mounted) return;
+
+      setState(() => _isProcessing = false);
+
+      if (order != null) {
+        HapticFeedback.mediumImpact();
+        if (_needTaxInvoice) {
+          Navigator.of(context).pushReplacementNamed('/cart/receipt');
+        } else {
+          ToastProvider.of(context).show('Order Placed Successfully!', ToastType.success);
+          Navigator.of(context).pushReplacementNamed('/home');
+        }
+      } else {
+        ToastProvider.of(context).show('Failed to place order. Please try again.', ToastType.error);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+      ToastProvider.of(context).show('Payment error: $e', ToastType.error);
     }
   }
 

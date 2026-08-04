@@ -40,7 +40,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                       SoftButton(
                         title: 'Return Home',
                         variant: SoftButtonVariant.secondary,
-                        onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+                        onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
                       ),
                     ],
                   ),
@@ -213,7 +213,7 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                   SoftButton(
                     title: 'Back to Home',
                     variant: SoftButtonVariant.secondary,
-                    onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+                    onPressed: () => Navigator.pushReplacementNamed(context, '/home'),
                   ),
                 ],
               ),
