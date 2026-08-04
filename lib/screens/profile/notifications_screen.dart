@@ -70,12 +70,33 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       appBar: AppBar(
         title: const Text('Notifications'),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
+      body: _notifications.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.notifications_off, size: 64, color: AppColors.brandMuted),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No notifications yet',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'You\'ll see order updates and promos here.',
+                    style: TextStyle(color: AppColors.brandMuted),
+                  ),
+                ],
+              ),
+            )
+          : ListView.builder(
+        padding: const EdgeInsets.all(24),
         itemCount: _notifications.length,
         itemBuilder: (context, index) {
           final notif = _notifications[index];
-          return GestureDetector(
+          return Semantics(
+            label: '${notif.title}. ${notif.message}. ${notif.date}',
+            child: GestureDetector(
             onTap: () => _markAsRead(notif.id),
             child: Container(
               margin: const EdgeInsets.only(bottom: 16),
@@ -153,6 +174,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 ],
               ),
             ),
+          ),
           );
         },
       ),

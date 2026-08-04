@@ -118,7 +118,32 @@ class _AddressesScreenState extends State<AddressesScreen> {
       appBar: AppBar(
         title: const Text('Address Book'),
       ),
-      body: SingleChildScrollView(
+      body: _addresses.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.location_off, size: 64, color: AppColors.brandMuted),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'No addresses saved',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Add a delivery address to get started.',
+                    style: TextStyle(color: AppColors.brandMuted),
+                  ),
+                  const SizedBox(height: 24),
+                  SoftButton(
+                    title: 'Add Address',
+                    variant: SoftButtonVariant.primary,
+                    onPressed: _openAddModal,
+                  ),
+                ],
+              ),
+            )
+          : SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

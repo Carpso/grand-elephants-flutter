@@ -198,9 +198,18 @@ class LipilaPaymentService {
 
   String _normalizePhone(String phone) {
     final cleaned = phone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleaned.startsWith('260')) return cleaned;
-    if (cleaned.startsWith('0')) return '260${cleaned.substring(1)}';
-    return '260$cleaned';
+    if (cleaned.startsWith('260')) {
+      if (cleaned.length != 12) return '';
+      return cleaned;
+    }
+    if (cleaned.startsWith('0')) {
+      final result = '260${cleaned.substring(1)}';
+      if (result.length != 12) return '';
+      return result;
+    }
+    final result = '260$cleaned';
+    if (result.length != 12) return '';
+    return result;
   }
 
   void dispose() {

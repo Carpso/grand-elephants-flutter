@@ -145,7 +145,7 @@ class DashboardScreen extends StatelessWidget {
                   title: item.title,
                   icon: item.icon,
                   color: item.color,
-                  onTap: () {},
+                  onTap: () => Navigator.of(context).pushNamed(item.route),
                 );
               },
             ),

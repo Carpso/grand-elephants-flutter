@@ -72,7 +72,11 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
           opacity: _fadeAnim.value,
           child: Transform.scale(
             scale: _scaleAnim.value,
-            child: child,
+            child: Semantics(
+              label: '${widget.product.name}, price ${widget.product.price.toStringAsFixed(0)} ZMW',
+              button: true,
+              child: child,
+            ),
           ),
         );
       },

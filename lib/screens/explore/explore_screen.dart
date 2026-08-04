@@ -82,7 +82,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return Scaffold(
       backgroundColor: AppColors.softSurface,
       body: SafeArea(
-        child: CustomScrollView(
+        child: RefreshIndicator(
+          onRefresh: () async {
+            setState(() => _loading = true);
+            await Future.delayed(const Duration(milliseconds: 1500));
+            if (mounted) setState(() => _loading = false);
+          },
+          child: CustomScrollView(
           slivers: [
             SliverToBoxAdapter(
               child: Container(
@@ -369,7 +375,10 @@ class _ProductGridItemState extends State<_ProductGridItem> {
     final cart = context.read<CartProvider>();
     final isWishlisted = wishlist.isInWishlist(widget.product.id);
 
-    return SoftCard(
+    return Semantics(
+      label: '${widget.product.name}, ${isWishlisted ? "wishlisted" : ""}',
+      button: true,
+      child: SoftCard(
       onTap: widget.onTap,
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -527,6 +536,7 @@ class _ProductGridItemState extends State<_ProductGridItem> {
             ],
           ),
         ],
+      ),
       ),
     );
   }

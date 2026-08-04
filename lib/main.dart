@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'constants/app_theme.dart';
@@ -48,7 +49,11 @@ import 'screens/superadmin/collection_numbers_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const SellOnApp());
+  runZonedGuarded(() {
+    runApp(const SellOnApp());
+  }, (error, stack) {
+    debugPrint('Uncaught error: $error');
+  });
 }
 
 class SellOnApp extends StatelessWidget {

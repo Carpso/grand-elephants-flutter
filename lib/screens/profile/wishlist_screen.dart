@@ -66,6 +66,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
                         isLiked: true,
                         onWishlistToggle: () => wishlistProvider.removeFromWishlist(product.id),
                         onAddToCart: () => cartProvider.addToCart(product),
+                        onTap: () => Navigator.of(context).pushNamed('/product/${product.id}'),
                       );
                     }).toList(),
                   ),

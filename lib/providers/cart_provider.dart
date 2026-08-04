@@ -10,13 +10,47 @@ class CartProvider extends ChangeNotifier {
   double _deliveryDistance = 0;
   String? _userId;
 
+  double _cachedSubtotal = 0;
+  double _cachedDeliveryFee = 0;
+  double _cachedTotal = 0;
+  int _cachedItemCount = 0;
+  bool _isDirty = true;
+
   List<CartItem> get items => _items;
   List<Order> get orders => _orders;
 
-  double get subtotal => _items.fold(0.0, (sum, item) => sum + item.price * item.quantity);
-  double get deliveryFee => _deliveryDistance > 0 ? 25.0 + (_deliveryDistance * 10.0) : 0.0;
-  double get total => subtotal + deliveryFee;
-  int get itemCount => _items.fold(0, (sum, item) => sum + item.quantity);
+  double get subtotal {
+    if (_isDirty) _recompute();
+    return _cachedSubtotal;
+  }
+
+  double get deliveryFee {
+    if (_isDirty) _recompute();
+    return _cachedDeliveryFee;
+  }
+
+  double get total {
+    if (_isDirty) _recompute();
+    return _cachedTotal;
+  }
+
+  int get itemCount {
+    if (_isDirty) _recompute();
+    return _cachedItemCount;
+  }
+
+  void _recompute() {
+    _cachedSubtotal = _items.fold(0.0, (sum, item) => sum + item.price * item.quantity);
+    _cachedDeliveryFee = _deliveryDistance > 0 ? 25.0 + (_deliveryDistance * 10.0) : 0.0;
+    _cachedTotal = _cachedSubtotal + _cachedDeliveryFee;
+    _cachedItemCount = _items.fold(0, (sum, item) => sum + item.quantity);
+    _isDirty = false;
+  }
+
+  void _markDirty() {
+    _isDirty = true;
+    notifyListeners();
+  }
 
   String get _cartKey => _userId != null ? '${StorageService.keyCart}_$_userId' : StorageService.keyCart;
   String get _orderKey => _userId != null ? 'orders_$_userId' : 'orders_guest';
@@ -48,7 +82,7 @@ class CartProvider extends ChangeNotifier {
 
   void setDeliveryDistance(double km) {
     _deliveryDistance = km;
-    notifyListeners();
+    _markDirty();
   }
 
   Future<void> addToCart(Product product) async {
@@ -65,7 +99,7 @@ class CartProvider extends ChangeNotifier {
         image: product.image,
       ));
     }
-    notifyListeners();
+    _markDirty();
     await _persistCart();
   }
 
@@ -84,19 +118,19 @@ class CartProvider extends ChangeNotifier {
         quantity: quantity,
       ));
     }
-    notifyListeners();
+    _markDirty();
     await _persistCart();
   }
 
   Future<void> removeFromCart(String id) async {
     _items.removeWhere((item) => item.id == id);
-    notifyListeners();
+    _markDirty();
     await _persistCart();
   }
 
   Future<void> clearCart() async {
     _items.clear();
-    notifyListeners();
+    _markDirty();
     await _persistCart();
   }
 
@@ -111,13 +145,16 @@ class CartProvider extends ChangeNotifier {
     );
     _orders.insert(0, newOrder);
     _items.clear();
+    _isDirty = true;
     await _persistOrders();
     await _persistCart();
     try {
       final globalOrders = await StorageService.get<List<dynamic>>('global_orders') ?? [];
       globalOrders.insert(0, newOrder.toJson());
       await StorageService.save('global_orders', globalOrders);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error persisting global orders: $e');
+    }
     notifyListeners();
   }
 }

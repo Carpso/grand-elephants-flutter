@@ -22,7 +22,9 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
   @override
   void initState() {
     super.initState();
+    final previousHandler = FlutterError.onError;
     FlutterError.onError = (details) {
+      previousHandler?.call(details);
       if (!_hasError) {
         setState(() {
           _hasError = true;
@@ -30,6 +32,12 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
         });
       }
     };
+  }
+
+  @override
+  void dispose() {
+    FlutterError.onError = null;
+    super.dispose();
   }
 
   void _reset() {

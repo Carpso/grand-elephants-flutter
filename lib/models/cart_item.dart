@@ -3,9 +3,9 @@ class CartItem {
   final String name;
   final double price;
   final String image;
-  int quantity;
+  final int quantity;
 
-  CartItem({
+  const CartItem({
     required this.id,
     required this.name,
     required this.price,

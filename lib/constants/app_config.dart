@@ -4,7 +4,7 @@ class AppConfig {
   static const String appDescription =
       'A state-of-the-art retail platform for premium heritage products.';
   static const String tenantDefault = 'grand-elephants-default';
-  static const bool mockBackend = true;
+  static const bool mockBackend = bool.fromEnvironment('MOCK_BACKEND', defaultValue: false);
 
   static const String lencoBaseUrl = 'https://api.lenco.co/access/v2';
   static String get lencoSecretKey =>
@@ -19,5 +19,5 @@ class AppConfig {
       'https://api.sellonapp.com/webhook/lipila';
   static String get lipilaApiKey =>
       const String.fromEnvironment('LIPILA_API_KEY');
-  static const bool lipilaUseSandbox = true;
+  static const bool lipilaUseSandbox = bool.fromEnvironment('LIPILA_SANDBOX', defaultValue: false);
 }

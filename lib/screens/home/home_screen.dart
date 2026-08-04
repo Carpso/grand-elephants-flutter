@@ -53,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen> {
             p.name.toLowerCase().contains(_debouncedSearch.toLowerCase()))
         .toList();
     final displayProducts =
-        filteredProducts.isNotEmpty ? filteredProducts : Product.all.take(5).toList();
+        filteredProducts.isNotEmpty ? filteredProducts : <Product>[];
 
     final categories = [
       {'id': '1', 'name': 'Handbags', 'slug': 'Handbags', 'disabled': false},
@@ -65,8 +65,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: AppColors.softSurface,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 100),
+        child: RefreshIndicator(
+          onRefresh: () async {
+            setState(() => _loading = true);
+            await Future.delayed(const Duration(seconds: 1));
+            if (mounted) setState(() => _loading = false);
+          },
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 100),
           child: Column(
             children: [
               Padding(
@@ -222,6 +228,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               if (_loading)
                 _buildSkeletons()
+              else if (displayProducts.isEmpty)
+                _buildEmptySearchState()
               else ...[
                 _buildBannerCarousel(config),
                 _buildFeaturedSection(displayProducts, cart, config),
@@ -250,6 +258,27 @@ class _HomeScreenState extends State<HomeScreen> {
               SizedBox(width: 24),
               Skeleton(width: 260, height: 320, borderRadius: 32),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptySearchState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 80, horizontal: 32),
+      child: Column(
+        children: [
+          const Icon(Icons.search_off, size: 64, color: AppColors.brandMuted),
+          const SizedBox(height: 16),
+          const Text(
+            'No items found',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Try a different search term.',
+            style: TextStyle(color: AppColors.brandMuted),
           ),
         ],
       ),
