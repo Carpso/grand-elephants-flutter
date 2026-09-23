@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/auth_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
-import 'package:sell_on_app/utils/validators.dart';
 import 'package:sell_on_app/utils/spring_curve.dart';
 import 'package:sell_on_app/widgets/logo.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
@@ -19,10 +19,11 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  bool _obscurePassword = true;
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _codeController = TextEditingController();
+  bool _otpSent = false;
   bool _isLoading = false;
+  int _resendIn = 0;
 
   late final AnimationController _headerController;
   late final Animation<double> _headerOpacity;
@@ -66,68 +67,72 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _phoneController.dispose();
+    _codeController.dispose();
     _headerController.dispose();
     _formController.dispose();
     super.dispose();
   }
 
-  bool _isValidEmail(String email) => isValidEmail(email);
-
-  void _handleForgotPassword() {
-    final email = _emailController.text.trim();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Reset Password'),
-        content: Text(
-          email.isNotEmpty && _isValidEmail(email)
-              ? 'A password reset link will be sent to $email'
-              : 'Enter your registered email address on the login form to receive a reset link.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+  String get _normalizedPhone {
+    final digits = _phoneController.text.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.startsWith('0')) return digits;
+    if (digits.startsWith('260') && digits.length == 12) return digits;
+    return '0$digits';
   }
 
-  Future<void> _handleLogin(String? role) async {
+  Future<void> _handleSendCode() async {
     if (_isLoading) return;
-
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-
-    if (email.isEmpty) {
-      ToastProvider.of(context).show('Please enter your email', ToastType.error);
+    final phone = _normalizedPhone;
+    if (phone.length < 10) {
+      ToastProvider.of(context).show('Enter a valid Zambian phone number', ToastType.error);
       return;
     }
-    if (!_isValidEmail(email)) {
-      ToastProvider.of(context).show('Please enter a valid email address', ToastType.error);
-      return;
+    setState(() => _isLoading = true);
+    try {
+      await context.read<AuthProvider>().requestOtp(phone);
+      if (!mounted) return;
+      setState(() {
+        _otpSent = true;
+        _resendIn = 60;
+      });
+      _tickResend();
+      ToastProvider.of(context).show('Verification code sent to $phone', ToastType.success);
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-    if (password.isEmpty) {
-      ToastProvider.of(context).show('Please enter your password', ToastType.error);
-      return;
-    }
+  }
 
+  void _tickResend() {
+    Future.delayed(const Duration(seconds: 1), () {
+      if (!mounted) return;
+      if (_resendIn > 0) {
+        setState(() => _resendIn--);
+        _tickResend();
+      }
+    });
+  }
+
+  Future<void> _handleVerify() async {
+    if (_isLoading) return;
+    final code = _codeController.text.trim();
+    if (code.length != 6) {
+      ToastProvider.of(context).show('Enter the 6-digit verification code', ToastType.error);
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       final auth = context.read<AuthProvider>();
-      await auth.signIn(email, password);
+      await auth.verifyOtp(_normalizedPhone, code);
       if (!mounted) return;
+      HapticFeedback.mediumImpact();
       Navigator.of(context).pushReplacementNamed('/home');
     } catch (e) {
       if (!mounted) return;
-      ToastProvider.of(context).show(
-        e.toString().replaceFirst('Exception: ', ''),
-        ToastType.error,
-      );
+      ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -208,49 +213,51 @@ class _LoginScreenState extends State<LoginScreen>
                   child: Column(
                     children: [
                       SoftInput(
-                        label: 'Email Address',
-                        hint: 'john@example.com',
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
+                        label: 'Mobile Number',
+                        hint: '097xxxxxxx',
+                        controller: _phoneController,
+                        keyboardType: TextInputType.phone,
+                        enabled: !_otpSent,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(10),
+                        ],
                       ),
-                      SoftInput(
-                        label: 'Password',
-                        hint: 'Enter your password',
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        icon: GestureDetector(
-                          onTap: () => setState(() => _obscurePassword = !_obscurePassword),
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 4),
-                            child: Icon(
-                              _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                              size: 20,
-                              color: AppColors.brandMuted,
-                            ),
-                          ),
+                      if (_otpSent) ...[
+                        const SizedBox(height: 16),
+                        SoftInput(
+                          label: 'Verification Code',
+                          hint: '6-digit code from SMS',
+                          controller: _codeController,
+                          keyboardType: TextInputType.number,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(6),
+                          ],
                         ),
-                      ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: const EdgeInsets.only(bottom: 32),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
                           child: GestureDetector(
-                            onTap: _handleForgotPassword,
-                            child: const Text(
-                              'Forgot Password?',
+                            onTap: _resendIn > 0 ? null : _handleSendCode,
+                            child: Text(
+                              _resendIn > 0 ? 'Resend in ${_resendIn}s' : 'Resend code',
                               style: TextStyle(
-                                color: AppColors.brandPrimary,
+                                color: _resendIn > 0
+                                    ? AppColors.brandMuted
+                                    : AppColors.brandPrimary,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 14,
+                                fontSize: 13,
                               ),
                             ),
                           ),
                         ),
-                      ),
+                      ],
+                      const SizedBox(height: 32),
                       SoftButton(
-                        title: 'Sign In',
+                        title: _otpSent ? 'Verify & Sign In' : 'Send Code',
                         isLoading: _isLoading,
-                        onPressed: () => _handleLogin(null),
+                        onPressed: _otpSent ? _handleVerify : _handleSendCode,
                       ),
                     ],
                   ),
@@ -260,13 +267,13 @@ class _LoginScreenState extends State<LoginScreen>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const Text(
-                      'Don\'t have an account? ',
+                      'New here? ',
                       style: TextStyle(color: Color(0xFF6B7280)),
                     ),
                     GestureDetector(
                       onTap: () => Navigator.of(context).pushNamed('/signup'),
                       child: const Text(
-                        'Sign Up',
+                        'Create Account',
                         style: TextStyle(
                           color: AppColors.brandPrimary,
                           fontWeight: FontWeight.bold,

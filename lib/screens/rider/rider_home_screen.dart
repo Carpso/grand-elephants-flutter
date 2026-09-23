@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/models/cart_item.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
-import 'package:sell_on_app/services/storage_service.dart';
+import 'package:sell_on_app/providers/rider_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/toast.dart';
@@ -16,69 +16,48 @@ class RiderHomeScreen extends StatefulWidget {
 }
 
 class _RiderHomeScreenState extends State<RiderHomeScreen> {
-  List<Order> _orders = [];
   String _activeTab = 'incoming';
 
   @override
   void initState() {
     super.initState();
-    _fetchOrders();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RiderProvider>().load();
+    });
   }
 
-  Future<void> _fetchOrders() async {
-    try {
-      final data = await StorageService.get<List<dynamic>>('global_orders');
-      if (data != null) {
-        setState(() {
-          _orders = data
-              .map((e) => Order.fromJson(e as Map<String, dynamic>))
-              .toList();
-        });
-      }
-    } catch (e) {
-      debugPrint('Fetch orders error: $e');
-    }
-  }
-
-  Future<void> _updateOrderStatus(String orderId, String newStatus) async {
-    final updatedOrders = _orders.map((o) {
-      if (o.id == orderId) {
-        return Order(
-          id: o.id,
-          items: o.items,
-          total: o.total,
-          date: o.date,
-          status: newStatus,
-        );
-      }
-      return o;
-    }).toList();
-    setState(() => _orders = updatedOrders);
-    await StorageService.save(
-        'global_orders', updatedOrders.map((e) => e.toJson()).toList());
-    if (mounted) {
-      ToastProvider.of(context).show('Order updated to $newStatus', ToastType.success);
-    }
-  }
-
-  List<Order> _getOrdersByTab() {
-    return _orders.where((order) {
+  List<Order> _getOrdersByTab(List<Order> orders) {
+    return orders.where((order) {
       final s = order.status;
-      if (_activeTab == 'incoming') return s == 'Pending';
-      if (_activeTab == 'active') return s == 'On the Way';
-      if (_activeTab == 'history') return s == 'Delivered' || s == 'Cancelled';
+      if (_activeTab == 'incoming') return s == 'Confirmed' || s == 'Processing' || s == 'Pending';
+      if (_activeTab == 'active') return s == 'Shipped' || s == 'Out for Delivery';
+      if (_activeTab == 'history') return s == 'Delivered' || s == 'Cancelled' || s == 'Refunded';
       return false;
     }).toList();
   }
 
   Future<void> _onRefresh() async {
-    await _fetchOrders();
+    await context.read<RiderProvider>().load();
+  }
+
+  Future<void> _updateOrderStatus(Order order, String newStatus) async {
+    try {
+      await context.read<RiderProvider>().updateOrderStatus(order.id, newStatus);
+      if (mounted) {
+        ToastProvider.of(context).show('Order ${order.id} is now $newStatus', ToastType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final config = context.watch<ConfigProvider>();
-    final currentOrders = _getOrdersByTab();
+    final rider = context.watch<RiderProvider>();
+    final currentOrders = _getOrdersByTab(rider.deliveries);
 
     return Scaffold(
       appBar: AppBar(
@@ -93,7 +72,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
               child: ListView(
                 padding: const EdgeInsets.all(16),
                 children: [
-                  if (_activeTab == 'incoming') _buildStats(config),
+                  if (_activeTab == 'incoming') _buildStats(config, rider),
                   Padding(
                     padding: const EdgeInsets.only(bottom: 16),
                     child: Text(
@@ -106,7 +85,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                     ),
                   ),
                   if (currentOrders.isEmpty)
-                    _buildEmptyState()
+                    _buildEmptyState(rider)
                   else
                     ...currentOrders.map((order) => _buildOrderCard(order)),
                 ],
@@ -141,10 +120,11 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     );
   }
 
-  Widget _buildStats(ConfigProvider config) {
-    final pendingCount = _orders.where((o) => o.status == 'Pending').length;
-    final deliveredCount = _orders.where((o) => o.status == 'Delivered').length;
-    final earnings = deliveredCount * 25;
+  Widget _buildStats(ConfigProvider config, RiderProvider rider) {
+    final available = rider.deliveries
+        .where((o) => o.status == 'Confirmed' || o.status == 'Processing' || o.status == 'Pending')
+        .length;
+    final balance = rider.balance;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -167,7 +147,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '$pendingCount',
+                    '$available',
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w900,
@@ -196,7 +176,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'K $earnings',
+                    config.formatPrice(balance),
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w900,
@@ -212,7 +192,12 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(RiderProvider rider) {
+    final message = rider.loading
+        ? 'Loading your deliveries...'
+        : rider.error != null
+            ? 'Could not load deliveries. Pull to refresh.'
+            : 'No orders found.';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Column(
@@ -220,7 +205,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           Icon(Icons.local_shipping, size: 48, color: Colors.grey[400]),
           const SizedBox(height: 16),
           Text(
-            'No orders found.',
+            message,
             style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500),
           ),
         ],
@@ -287,7 +272,7 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          _buildRouteInfo(),
+          _buildRouteInfo(order),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -310,20 +295,23 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
             SoftButton(
               title: 'Accept Delivery',
               variant: SoftButtonVariant.primary,
-              onPressed: () => _updateOrderStatus(order.id, 'On the Way'),
+              onPressed: () => _updateOrderStatus(order, 'Shipped'),
             ),
           if (_activeTab == 'active')
             SoftButton(
               title: 'Mark Delivered',
               variant: SoftButtonVariant.secondary,
-              onPressed: () => _updateOrderStatus(order.id, 'Delivered'),
+              onPressed: () => _updateOrderStatus(order, 'Delivered'),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildRouteInfo() {
+  Widget _buildRouteInfo(Order order) {
+    final businessName = order.businessName?.isNotEmpty == true
+        ? order.businessName!
+        : context.read<ConfigProvider>().appName;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -331,9 +319,11 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           children: [
             const Icon(Icons.store, size: 16, color: AppColors.brandSecondary),
             const SizedBox(width: 8),
-            Text(
-              '${context.read<ConfigProvider>().appName} HQ',
-              style: const TextStyle(fontSize: 14, color: AppColors.brandSecondary),
+            Expanded(
+              child: Text(
+                businessName,
+                style: const TextStyle(fontSize: 14, color: AppColors.brandSecondary),
+              ),
             ),
           ],
         ),
@@ -357,9 +347,13 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           children: [
             const Icon(Icons.person, size: 16, color: AppColors.brandSecondary),
             const SizedBox(width: 8),
-            const Text(
-              'Customer (Plot 44)',
-              style: TextStyle(fontSize: 14, color: AppColors.brandSecondary),
+            Expanded(
+              child: Text(
+                order.deliveryAddress.isEmpty
+                    ? 'Customer address on delivery'
+                    : order.deliveryAddress,
+                style: const TextStyle(fontSize: 14, color: AppColors.brandSecondary),
+              ),
             ),
           ],
         ),

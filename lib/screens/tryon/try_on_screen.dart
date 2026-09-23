@@ -1,9 +1,13 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/models/product.dart';
+import 'package:sell_on_app/providers/cart_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/soft_input.dart';
 import 'package:sell_on_app/widgets/toast.dart';
 
 class TryOnScreen extends StatefulWidget {
@@ -19,6 +23,13 @@ class _TryOnScreenState extends State<TryOnScreen>
   bool _isProcessing = false;
   bool _showAR = false;
   bool _isCameraMode = false;
+
+  String? _productImageUrl;
+  double _scale = 1.0;
+  Offset _offset = Offset.zero;
+
+  CameraController? _cameraController;
+  bool _cameraReady = false;
 
   late final AnimationController _contentController;
   late final Animation<double> _contentOpacity;
@@ -52,10 +63,7 @@ class _TryOnScreenState extends State<TryOnScreen>
       CurvedAnimation(parent: _arItemController, curve: Curves.easeInOut),
     );
     _arItemScale = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _arItemController,
-        curve: Curves.elasticOut,
-      ),
+      CurvedAnimation(parent: _arItemController, curve: Curves.elasticOut),
     );
   }
 
@@ -64,39 +72,143 @@ class _TryOnScreenState extends State<TryOnScreen>
     _linkController.dispose();
     _contentController.dispose();
     _arItemController.dispose();
+    _cameraController?.dispose();
     super.dispose();
   }
 
-  void _handleFetchLink() {
-    if (_linkController.text.trim().isEmpty) return;
+  Future<void> _initCamera() async {
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) return;
+      final controller = CameraController(
+        cameras.first,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      _cameraController = controller;
+      await controller.initialize();
+      if (mounted) setState(() => _cameraReady = true);
+    } catch (_) {
+      if (mounted) setState(() => _cameraReady = false);
+    }
+  }
+
+  Future<void> _handleStartCamera() async {
+    setState(() {
+      _isCameraMode = true;
+      _showAR = true;
+      _isProcessing = false;
+    });
+    _arItemController.forward(from: 0);
+    await _initCamera();
+  }
+
+  Future<void> _handleFetchLink() async {
+    final url = _linkController.text.trim();
+    if (url.isEmpty) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
+      ToastProvider.of(context).show('Enter a valid http(s) image URL', ToastType.error);
+      return;
+    }
     setState(() {
       _isProcessing = true;
       _isCameraMode = false;
     });
-    Future.delayed(const Duration(seconds: 2), () {
+    try {
+      await precacheImage(NetworkImage(url), context);
       if (!mounted) return;
       setState(() {
         _isProcessing = false;
         _showAR = true;
+        _productImageUrl = url;
+        _scale = 1.0;
+        _offset = Offset.zero;
       });
-      _arItemController.forward();
-    });
+      _arItemController.forward(from: 0);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isProcessing = false);
+      ToastProvider.of(context).show('Could not load that image URL', ToastType.error);
+    }
   }
 
-  void _handleStartCamera() {
-    setState(() {
-      _isCameraMode = true;
-      _showAR = true;
-    });
-    _arItemController.forward();
+  String _deriveName(String source) {
+    if (source.isEmpty) return 'Try-On Item';
+    final uri = Uri.tryParse(source);
+    final segment = (uri?.pathSegments.isNotEmpty ?? false)
+        ? uri!.pathSegments.last
+        : source.split('/').last;
+    final cleaned = segment.split('.').first.replaceAll(RegExp(r'[-_]+'), ' ').trim();
+    return cleaned.isEmpty ? 'Try-On Item' : cleaned;
   }
 
-  final List<Map<String, dynamic>> _socialPlatforms = [
-    {'name': 'Instagram', 'icon': Icons.camera_alt, 'color': const Color(0xFFE1306C)},
-    {'name': 'TikTok', 'icon': Icons.music_note, 'color': Colors.black},
-    {'name': 'Shopify', 'icon': Icons.shopping_cart, 'color': const Color(0xFF96BF48)},
-    {'name': 'Facebook', 'icon': Icons.facebook, 'color': const Color(0xFF1877F2)},
-  ];
+  Future<void> _handleAddToCart() async {
+    final cart = context.read<CartProvider>();
+    final nameCtrl = TextEditingController(
+      text: _deriveName(_productImageUrl ?? _linkController.text),
+    );
+    final priceCtrl = TextEditingController();
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add to Cart'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SoftInput(
+              label: 'Product Name',
+              controller: nameCtrl,
+              hint: 'Item name',
+            ),
+            SoftInput(
+              label: 'Price',
+              controller: priceCtrl,
+              hint: '0.00',
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+
+    if (result == true) {
+      final name = nameCtrl.text.trim();
+      final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
+      if (name.isEmpty || price <= 0) {
+        if (mounted) {
+          ToastProvider.of(context)
+              .show('Provide a name and a valid price', ToastType.error);
+        }
+      } else {
+        final product = Product(
+          id: 'tryon-${DateTime.now().millisecondsSinceEpoch}',
+          name: name,
+          price: price,
+          priceCents: (price * 100).round(),
+          image: _productImageUrl ?? '',
+          description: 'Added via Virtual Try-On',
+          category: 'Try-On',
+        );
+        await cart.addToCart(product);
+        if (!mounted) return;
+        ToastProvider.of(context).show('$name added to cart', ToastType.success);
+        Navigator.of(context).pushNamed('/cart/checkout');
+      }
+    }
+    nameCtrl.dispose();
+    priceCtrl.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -162,7 +274,7 @@ class _TryOnScreenState extends State<TryOnScreen>
               ),
               const SizedBox(height: 16),
               const Text(
-                'Paste a product link from your favorite store or social media, or use your camera to try items properly.',
+                'Paste a product image link or use your camera to preview an item against your camera feed.',
                 style: TextStyle(
                   color: Color(0xFF9CA3AF),
                   fontSize: 16,
@@ -207,7 +319,7 @@ class _TryOnScreenState extends State<TryOnScreen>
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      'Or Paste Link',
+                      'Or Paste Image URL',
                       style: TextStyle(
                         color: Colors.grey[500],
                         fontSize: 12,
@@ -260,7 +372,7 @@ class _TryOnScreenState extends State<TryOnScreen>
                             child: TextField(
                               controller: _linkController,
                               decoration: const InputDecoration(
-                                hintText: 'https://instagram.com/p/...',
+                                hintText: 'https://store.com/item.jpg',
                                 hintStyle: TextStyle(color: Color(0xFF555555)),
                                 border: InputBorder.none,
                                 isDense: true,
@@ -270,56 +382,20 @@ class _TryOnScreenState extends State<TryOnScreen>
                                 fontWeight: FontWeight.w500,
                               ),
                               autocorrect: false,
+                              onChanged: (_) => setState(() {}),
                             ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: _socialPlatforms.map((p) {
-                        return Column(
-                          children: [
-                            Container(
-                              width: 48,
-                              height: 48,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.05),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.1),
-                                ),
-                              ),
-                              child: Icon(
-                                p['icon'] as IconData,
-                                size: 20,
-                                color: p['color'] as Color,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              p['name'] as String,
-                              style: const TextStyle(
-                                color: Color(0xFF6B7280),
-                                fontSize: 8,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 32),
                     SoftButton(
-                      title: _isProcessing
-                          ? 'Extracting item...'
-                          : 'Start Virtual Try-On',
+                      title: _isProcessing ? 'Loading image...' : 'Start Virtual Try-On',
                       variant: SoftButtonVariant.secondary,
-                      onPressed:
-                          _isProcessing || _linkController.text.trim().isEmpty
-                              ? null
-                              : _handleFetchLink,
+                      isLoading: _isProcessing,
+                      onPressed: _isProcessing || _linkController.text.trim().isEmpty
+                          ? null
+                          : _handleFetchLink,
                     ),
                   ],
                 ),
@@ -366,88 +442,63 @@ class _TryOnScreenState extends State<TryOnScreen>
   Widget _buildARView(ConfigProvider config) {
     return Stack(
       children: [
-        if (_isCameraMode)
-          Container(color: Colors.black)
-        else
-          Image.network(
-            'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=1000&auto=format&fit=crop',
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            errorBuilder: (context, error, stackTrace) =>
-                Container(color: Colors.black),
-          ),
-        Container(color: Colors.black.withValues(alpha: 0.2)),
-        AnimatedBuilder(
-          animation: _arItemController,
-          builder: (context, child) {
-            return Opacity(
-              opacity: _arItemOpacity.value,
-              child: Transform.scale(
-                scale: _arItemScale.value,
-                child: child,
-              ),
-            );
-          },
-          child: Positioned(
-            top: MediaQuery.of(context).size.height * 0.2,
-            left: 0,
-            right: 0,
-            child: Column(
-              children: [
-                Container(
-                  width: 256,
-                  height: 256,
-                  decoration: BoxDecoration(
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
-                        blurRadius: 32,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+        Positioned.fill(child: _buildARBackground()),
+        Positioned.fill(
+          child: Container(color: Colors.black.withValues(alpha: 0.15)),
+        ),
+        if (_productImageUrl != null)
+          Center(
+            child: AnimatedBuilder(
+              animation: _arItemController,
+              builder: (context, child) {
+                return Opacity(
+                  opacity: _arItemOpacity.value,
+                  child: Transform.scale(
+                    scale: _arItemScale.value * _scale,
+                    child: child,
                   ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.network(
-                      'https://placehold.co/400x400/F3F4F6/D4AF37?text=Simulated+Item',
-                      fit: BoxFit.contain,
-                      errorBuilder: (context, error, stackTrace) =>
-                          Container(
-                        color: AppColors.softSurface,
-                        child: const Icon(
-                          Icons.image,
-                          size: 80,
-                          color: AppColors.brandMuted,
+                );
+              },
+              child: Transform.translate(
+                offset: _offset,
+                child: GestureDetector(
+                  onPanUpdate: (details) =>
+                      setState(() => _offset += details.delta),
+                  child: Container(
+                    width: 240,
+                    height: 240,
+                    decoration: BoxDecoration(
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          blurRadius: 32,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.network(
+                        _productImageUrl!,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: AppColors.softSurface,
+                          child: const Icon(
+                            Icons.broken_image,
+                            size: 64,
+                            color: AppColors.brandMuted,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 16),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandPrimary,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Perfect Fit',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
-        ),
         Positioned(
-          top: 56,
-          left: 32,
+          top: 24,
+          left: 24,
           child: GestureDetector(
             onTap: () => setState(() => _showAR = false),
             child: Container(
@@ -466,50 +517,113 @@ class _TryOnScreenState extends State<TryOnScreen>
             ),
           ),
         ),
+        if (_productImageUrl != null)
+          Positioned(
+            top: 32,
+            right: 24,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+              ),
+              child: const Text(
+                'Drag to move',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
         Positioned(
-          left: 32,
-          right: 32,
-          bottom: 56,
+          left: 24,
+          right: 24,
+          bottom: 32,
           child: SoftCard(
-            padding: const EdgeInsets.all(24),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                const Text(
+                  'Try-On Preview',
+                  style: TextStyle(
+                    color: AppColors.brandDark,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 18,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Drag the item to position it, then resize.',
+                  style: TextStyle(
+                    color: AppColors.brandMuted,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
                   children: [
-                    const Text(
-                      'Extracted Product',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
+                    const Icon(Icons.zoom_out, size: 18, color: AppColors.brandMuted),
+                    Expanded(
+                      child: Slider(
+                        value: _scale,
+                        min: 0.3,
+                        max: 2.0,
+                        activeColor: AppColors.brandPrimary,
+                        onChanged: (v) => setState(() => _scale = v),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Ready for Checkout',
-                      style: TextStyle(
-                        color: AppColors.brandPrimary,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
-                    ),
+                    const Icon(Icons.zoom_in, size: 18, color: AppColors.brandMuted),
                   ],
                 ),
-                SoftButton(
-                  title: 'Add to Cart',
-                  variant: SoftButtonVariant.primary,
-                  onPressed: () {
-                    ToastProvider.of(context).show('Extracted item added to cart!', ToastType.success);
-                    Navigator.of(context).pushNamed('/cart/checkout');
-                  },
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: SoftButton(
+                    title: 'Add to Cart',
+                    variant: SoftButtonVariant.primary,
+                    onPressed: _handleAddToCart,
+                  ),
                 ),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildARBackground() {
+    final controller = _cameraController;
+    if (_isCameraMode && _cameraReady && controller != null) {
+      return Center(child: CameraPreview(controller));
+    }
+    return Container(
+      color: Colors.black,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.view_in_ar,
+              size: 64,
+              color: Colors.white.withValues(alpha: 0.2),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _isCameraMode ? 'Camera unavailable' : 'Preview mode',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.4),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

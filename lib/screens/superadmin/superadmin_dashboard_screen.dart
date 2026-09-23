@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/providers/admin_provider.dart';
 import 'package:sell_on_app/providers/auth_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
@@ -18,9 +19,29 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
   bool _healthVisible = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AdminProvider>().loadStats();
+    });
+  }
+
+  String _formatCents(int cents) {
+    final amount = cents / 100;
+    final parts = amount.toStringAsFixed(2).split('.');
+    final buf = StringBuffer();
+    for (var i = 0; i < parts[0].length; i++) {
+      if (i > 0 && (parts[0].length - i) % 3 == 0) buf.write(',');
+      buf.write(parts[0][i]);
+    }
+    return 'K ${buf.toString()}.${parts[1]}';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final config = context.watch<ConfigProvider>();
     final auth = context.watch<AuthProvider>();
+    final stats = context.watch<AdminProvider>().stats;
 
     return Scaffold(
       body: Column(
@@ -30,7 +51,7 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                _buildPerformanceCard(),
+                _buildPerformanceCard(stats),
                 const SizedBox(height: 24),
                 const Padding(
                   padding: EdgeInsets.only(bottom: 16),
@@ -166,8 +187,17 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
     );
   }
 
-  Widget _buildPerformanceCard() {
-    final data = [40.0, 65.0, 30.0, 85.0, 55.0, 95.0, 70.0];
+  Widget _buildPerformanceCard(AdminStats stats) {
+    final raw = <double>[
+      stats.users.toDouble(),
+      stats.businesses.toDouble(),
+      stats.orders.toDouble(),
+      stats.products.toDouble(),
+      stats.pendingBusinesses.toDouble(),
+      stats.pendingPayouts.toDouble(),
+    ];
+    final maxValue = raw.fold<double>(1, (a, b) => a > b ? a : b);
+    final data = raw.map((v) => v / maxValue * 100).toList();
 
     return SoftCard(
       padding: const EdgeInsets.all(24),
@@ -224,19 +254,19 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
           const SizedBox(height: 16),
           const Divider(),
           const SizedBox(height: 16),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Total Revenue',
                     style: TextStyle(fontSize: 12, color: AppColors.brandMuted),
                   ),
                   Text(
-                    'K 1.2M',
-                    style: TextStyle(
+                    _formatCents(stats.gmvCents),
+                    style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: AppColors.brandDark,
@@ -247,13 +277,13 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
-                    'Active Sessions',
+                  const Text(
+                    'Orders Placed',
                     style: TextStyle(fontSize: 12, color: AppColors.brandMuted),
                   ),
                   Text(
-                    '1,204',
-                    style: TextStyle(
+                    '${stats.orders}',
+                    style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: AppColors.brandDark,
@@ -305,10 +335,17 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
           width: (MediaQuery.of(context).size.width - 24 * 2 - 16) / 2,
           child: InkWell(
             onTap: () {
-              if (item['title'] == 'System Health') {
-                setState(() => _healthVisible = true);
-              } else if (item['title'] == 'Collection Numbers') {
-                Navigator.pushNamed(context, '/superadmin/collection-numbers');
+              switch (item['title']) {
+                case 'System Health':
+                  setState(() => _healthVisible = true);
+                case 'Collection Numbers':
+                  Navigator.pushNamed(context, '/superadmin/collection-numbers');
+                case 'Global Settings':
+                  Navigator.pushNamed(context, '/admin/settings');
+                case 'Access Control':
+                  Navigator.pushNamed(context, '/admin/users');
+                case 'Social Planner':
+                  Navigator.pushNamed(context, '/admin/marketing');
               }
             },
             borderRadius: BorderRadius.circular(16),

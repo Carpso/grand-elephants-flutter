@@ -1,17 +1,22 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/models/cart_item.dart';
 
 class IncomingOrderModal extends StatefulWidget {
   final bool visible;
   final VoidCallback onAccept;
   final VoidCallback onDecline;
+  final Order? order;
+  final double? fare;
 
   const IncomingOrderModal({
     super.key,
     required this.visible,
     required this.onAccept,
     required this.onDecline,
+    this.order,
+    this.fare,
   });
 
   @override
@@ -163,6 +168,14 @@ class _IncomingOrderModalState extends State<IncomingOrderModal>
   }
 
   Widget _buildContent() {
+    final order = widget.order;
+    final fare = widget.fare ?? order?.total;
+    final businessName = (order?.businessName ?? '').trim();
+    final pickUp = businessName.isNotEmpty ? businessName : 'Pick Up';
+    final dropOff = (order?.deliveryAddress ?? '').trim().isNotEmpty
+        ? order!.deliveryAddress.trim()
+        : 'Drop Off';
+
     return Column(
       children: [
         AnimatedBuilder(
@@ -195,18 +208,18 @@ class _IncomingOrderModalState extends State<IncomingOrderModal>
           ),
         ),
         const SizedBox(height: 16),
-        const Text(
-          'K 45.00',
-          style: TextStyle(
+        Text(
+          fare != null ? 'K ${fare.toStringAsFixed(2)}' : 'Incoming delivery',
+          style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
             fontSize: 32,
           ),
         ),
         const SizedBox(height: 4),
-        const Text(
-          'Grand Mall • 4.2 km',
-          style: TextStyle(
+        Text(
+          order != null ? '#${order.id}' : 'New delivery request',
+          style: const TextStyle(
             color: Color(0xFF9CA3AF),
             fontSize: 18,
           ),
@@ -216,11 +229,12 @@ class _IncomingOrderModalState extends State<IncomingOrderModal>
           padding: const EdgeInsets.symmetric(horizontal: 32),
           child: Row(
             children: [
-              const _RoutePoint(label: 'Pick Up', sub: '1.2km', color: Colors.white),
+              _RoutePoint(label: 'Pick Up', sub: pickUp, color: Colors.white),
               Expanded(
                 child: Container(height: 1, color: const Color(0xFF6B7280)),
               ),
-              const _RoutePoint(label: 'Drop Off', sub: '3.0km', color: Color(0xFF14B8A6)),
+              _RoutePoint(
+                  label: 'Drop Off', sub: dropOff, color: const Color(0xFF14B8A6)),
             ],
           ),
         ),
@@ -344,11 +358,17 @@ class _RoutePoint extends StatelessWidget {
             fontWeight: FontWeight.bold,
           ),
         ),
-        Text(
-          sub,
-          style: const TextStyle(
-            color: Color(0xFF6B7280),
-            fontSize: 12,
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 110),
+          child: Text(
+            sub,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Color(0xFF6B7280),
+              fontSize: 12,
+            ),
           ),
         ),
       ],

@@ -1,11 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/models/user.dart';
 import 'package:sell_on_app/providers/auth_provider.dart';
+import 'package:sell_on_app/providers/cart_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:sell_on_app/providers/wishlist_provider.dart';
+import 'package:sell_on_app/services/api_client.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -17,28 +23,44 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final List<_MenuItem> _menuItems = [
     _MenuItem(title: 'My Orders', icon: Icons.shopping_bag, route: '/orders'),
-    _MenuItem(title: 'Wishlist', icon: Icons.favorite, route: '/wishlist'),
-    _MenuItem(title: 'Addresses', icon: Icons.location_on, route: '/addresses'),
-    _MenuItem(title: 'Notifications', icon: Icons.notifications, route: '/notifications'),
-    _MenuItem(title: 'Settings', icon: Icons.settings, route: '/settings'),
-    _MenuItem(title: 'Help & Support', icon: Icons.help, route: '/support'),
+    _MenuItem(title: 'Wishlist', icon: Icons.favorite, route: '/profile/wishlist'),
+    _MenuItem(title: 'Addresses', icon: Icons.location_on, route: '/profile/addresses'),
+    _MenuItem(title: 'Notifications', icon: Icons.notifications, route: '/profile/notifications'),
+    _MenuItem(title: 'Settings', icon: Icons.settings, route: '/profile/settings'),
+    _MenuItem(title: 'Help & Support', icon: Icons.help, route: '/profile/help'),
   ];
 
-  void _pickProfileImage() {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<CartProvider>().loadOrders();
+    });
+  }
+
+  Future<void> _pickProfileImage() async {
     HapticFeedback.selectionClick();
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Notice'),
-        content: const Text('Profile photo upload simulated.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+    final auth = context.read<AuthProvider>();
+    final user = auth.user;
+    if (user == null) return;
+
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
     );
+    if (picked == null) return;
+
+    try {
+      await ApiClient.instance.patch('/api/me', body: {'profilePhoto': picked.path});
+      await auth.updateProfile(name: user.name, email: user.email);
+      if (!mounted) return;
+      ToastProvider.of(context).show('Profile photo updated', ToastType.success);
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context).show('Could not update profile photo', ToastType.error);
+    }
   }
 
   void _handleSignOut() {
@@ -50,6 +72,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final config = context.watch<ConfigProvider>();
+    final cart = context.watch<CartProvider>();
+    final wishlist = context.watch<WishlistProvider>();
     final user = auth.user;
     final role = auth.role;
     final riderStatus = auth.riderStatus;
@@ -60,7 +84,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.only(bottom: 100),
         child: Column(
           children: [
-            _buildHeader(user, role, auth),
+            _buildHeader(user, role, auth, cart.orders.length, wishlist.wishlist.length),
             const SizedBox(height: 6),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -106,7 +130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHeader(user, String role, AuthProvider auth) {
+  Widget _buildHeader(user, String role, AuthProvider auth, int ordersCount, int wishlistCount) {
     return Container(
       padding: const EdgeInsets.only(top: 64, bottom: 24, left: 24, right: 24),
       width: double.infinity,
@@ -146,16 +170,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: AppColors.softSurface,
                   ),
                   child: ClipOval(
-                    child: Image.network(
-                      user?.profilePhoto ??
-                          'https://ui-avatars.com/api/?name=User&background=eff6ff&color=d4af37',
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(
-                        Icons.person,
-                        size: 48,
-                        color: AppColors.brandMuted,
-                      ),
-                    ),
+                    child: user?.profilePhoto != null && user!.profilePhoto!.isNotEmpty
+                        ? Image.network(
+                            user.profilePhoto!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => _InitialsAvatar(user: user),
+                          )
+                        : _InitialsAvatar(user: user),
                   ),
                 ),
               ),
@@ -225,23 +246,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildStatsRow(),
+          _buildStatsRow(ordersCount, wishlistCount),
         ],
       ),
     );
   }
 
-  Widget _buildStatsRow() {
+  Widget _buildStatsRow(int ordersCount, int wishlistCount) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _StatItem(value: '12', label: 'Orders'),
+          _StatItem(value: '$ordersCount', label: 'Orders'),
           Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
-          _StatItem(value: '5', label: 'Wishlist'),
+          _StatItem(value: '$wishlistCount', label: 'Wishlist'),
           Container(width: 1, height: 32, color: const Color(0xFFE5E7EB)),
-          _StatItem(value: '2', label: 'Reviews'),
+          _StatItem(value: '—', label: 'Reviews'),
         ],
       ),
     );
@@ -474,6 +495,38 @@ class _StatItem extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _InitialsAvatar extends StatelessWidget {
+  final User? user;
+
+  const _InitialsAvatar({this.user});
+
+  String get _initials {
+    final name = user == null ? '' : user!.name.trim();
+    if (name.isEmpty) return 'U';
+    final parts = name.split(RegExp(r'\s+'));
+    if (parts.length == 1) {
+      return parts.first.substring(0, 1).toUpperCase();
+    }
+    return (parts.first.substring(0, 1) + parts.last.substring(0, 1)).toUpperCase();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.brandPrimary,
+      alignment: Alignment.center,
+      child: Text(
+        _initials,
+        style: const TextStyle(
+          fontSize: 40,
+          fontWeight: FontWeight.bold,
+          color: AppColors.brandDark,
+        ),
+      ),
     );
   }
 }

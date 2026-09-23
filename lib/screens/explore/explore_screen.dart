@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/models/product.dart';
 import 'package:sell_on_app/providers/cart_provider.dart';
+import 'package:sell_on_app/providers/catalog_provider.dart';
 import 'package:sell_on_app/providers/wishlist_provider.dart';
 import 'package:sell_on_app/widgets/price_tag.dart';
 import 'package:sell_on_app/widgets/skeleton.dart';
@@ -59,7 +60,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   List<Product> get _filteredProducts {
-    return Product.all.where((p) {
+    final all = context.read<CatalogProvider>().products;
+    return all.where((p) {
       final matchesCategory =
           _activeCategory == 'All' || p.category == _activeCategory;
       final matchesSearch = p.name
@@ -370,6 +372,12 @@ class _ProductGridItem extends StatefulWidget {
 
 class _ProductGridItemState extends State<_ProductGridItem> {
   bool _imageLoaded = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _imageLoaded = false;
+  }
 
   @override
   Widget build(BuildContext context) {

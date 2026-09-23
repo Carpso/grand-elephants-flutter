@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:sell_on_app/services/api_client.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/soft_input.dart';
@@ -60,6 +61,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         _descriptionController.text,
         _logoController.text,
       );
+      await ApiClient.instance.patch('/api/admin/settings', body: {
+        'vat_pct': _taxController.text,
+      });
       config.setTaxRate(double.tryParse(_taxController.text) ?? config.taxRate);
       if (mounted) {
         ToastProvider.of(context).show('Configuration Saved Successfully', ToastType.success);
@@ -72,8 +76,43 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     }
   }
 
+  Future<void> _toggleMaintenance() async {
+    final config = context.read<ConfigProvider>();
+    final next = !config.maintenanceMode;
+    config.toggleMaintenanceMode();
+    try {
+      await ApiClient.instance.patch('/api/admin/settings', body: {
+        'maintenance_mode': next ? '1' : '0',
+      });
+      if (mounted) {
+        ToastProvider.of(context).show(next ? 'Maintenance mode enabled.' : 'Maintenance mode disabled.', ToastType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    }
+  }
+
   void _handleBackup() {
-    ToastProvider.of(context).show('Backup initiated. You will be notified when complete.', ToastType.info);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Run System Backup'),
+        content: const Text(
+          'There is no server-side backup endpoint exposed to this app. Contact the superadmin to schedule a backup from the backend.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              ToastProvider.of(context).show('Backup must be scheduled server-side.', ToastType.info);
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -194,7 +233,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                         ),
                         Switch(
                           value: config.maintenanceMode,
-                          onChanged: (_) => config.toggleMaintenanceMode(),
+                          onChanged: (_) => _toggleMaintenance(),
                           activeThumbColor: AppColors.error,
                           activeTrackColor: AppColors.error,
                         ),

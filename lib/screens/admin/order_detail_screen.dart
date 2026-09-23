@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/widgets/price_tag.dart';
-import 'package:sell_on_app/widgets/soft_button.dart';
+import 'package:sell_on_app/models/cart_item.dart';
+import 'package:sell_on_app/services/api_client.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
-import 'package:sell_on_app/widgets/toast.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final String? orderId;
@@ -15,193 +14,275 @@ class OrderDetailScreen extends StatefulWidget {
 }
 
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
-  String _status = 'Processing';
-  String? _rider;
-  bool _riderModalVisible = false;
+  Order? _order;
+  bool _loading = true;
+  String? _error;
 
-  final List<_AvailableRider> _availableRiders = const [
-    _AvailableRider(id: 1, name: 'Kyle Reese', status: 'Available', distance: '1.2km'),
-    _AvailableRider(id: 2, name: 'T-800 Model', status: 'Busy', distance: '3.5km'),
-    _AvailableRider(id: 3, name: 'Sarah Connor', status: 'Available', distance: '0.5km'),
-  ];
-
-  void _assignRider(String riderName) {
-    setState(() {
-      _rider = riderName;
-      _status = 'Assigned';
-      _riderModalVisible = false;
-    });
-    ToastProvider.of(context).show('$riderName has been assigned to this order.', ToastType.success);
+  @override
+  void initState() {
+    super.initState();
+    _load();
   }
 
-  void _handleRefund() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirm Refund'),
-        content: const Text('Are you sure you want to refund this order? K 1,200 will be returned to the customer.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              setState(() => _status = 'Refunded');
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-            },
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Refund'),
-          ),
-        ],
-      ),
-    );
+  String get _orderId {
+    final routeId = ModalRoute.of(context)?.settings.arguments as String?;
+    return widget.orderId ?? routeId ?? '';
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    final id = _orderId;
+    if (id.isEmpty) {
+      setState(() {
+        _loading = false;
+        _error = 'No order id provided.';
+      });
+      return;
+    }
+    try {
+      final res = await ApiClient.instance.get('/api/orders/$id');
+      if (!mounted) return;
+      final data = res as Map<String, dynamic>;
+      final orderJson = data['order'] is Map ? data['order'] as Map<String, dynamic> : data;
+      setState(() {
+        _order = Order.fromJson(orderJson);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = '$e'.replaceFirst('Exception: ', '');
+        _loading = false;
+      });
+    }
+  }
+
+  String _formatCents(int cents) {
+    final amount = cents / 100;
+    final parts = amount.toStringAsFixed(2).split('.');
+    final buf = StringBuffer();
+    for (var i = 0; i < parts[0].length; i++) {
+      if (i > 0 && (parts[0].length - i) % 3 == 0) buf.write(',');
+      buf.write(parts[0][i]);
+    }
+    return 'K ${buf.toString()}.${parts[1]}';
   }
 
   @override
   Widget build(BuildContext context) {
-    final orderId = widget.orderId ?? '8842';
+    final orderId = _orderId;
 
     return Scaffold(
-      appBar: AppBar(title: Text('Order #$orderId')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SoftCard(
-              padding: const EdgeInsets.all(20),
-              child: Container(
-                decoration: const BoxDecoration(
-                  border: Border(left: BorderSide(color: AppColors.brandPrimary, width: 4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      appBar: AppBar(title: Text(orderId.isEmpty ? 'Order Detail' : 'Order #$orderId')),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text(
-                          'CURRENT STATUS',
-                          style: TextStyle(color: AppColors.brandMuted, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1),
-                        ),
+                        const Icon(Icons.error_outline, size: 56, color: AppColors.brandMuted),
+                        const SizedBox(height: 16),
                         Text(
-                          'Updated 10m ago',
-                          style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.brandMuted),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _load,
+                          child: const Text('Retry'),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _status,
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.brandDark),
-                    ),
-                    if (_rider != null) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Rider: $_rider',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandPrimary),
-                      ),
-                    ],
-                  ],
-                ),
+                  ),
+                )
+              : _buildOrder(_order!),
+    );
+  }
+
+  Widget _buildOrder(Order order) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SoftCard(
+            padding: const EdgeInsets.all(20),
+            child: Container(
+              decoration: const BoxDecoration(
+                border: Border(left: BorderSide(color: AppColors.brandPrimary, width: 4)),
               ),
-            ),
-            const SizedBox(height: 16),
-            SoftCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Customer Details',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark),
+                    'CURRENT STATUS',
+                    style: TextStyle(color: AppColors.brandMuted, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 1),
                   ),
-                  const SizedBox(height: 12),
-                  _buildInfoRow(Icons.person, 'John Doe'),
                   const SizedBox(height: 8),
-                  _buildInfoRow(Icons.phone, '+260 97 123 4567'),
+                  Text(
+                    order.status,
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                  ),
+                  if (order.date.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Placed on ${order.date}',
+                      style: const TextStyle(color: AppColors.brandMuted, fontSize: 12),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SoftCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Customer Details',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark),
+                ),
+                const SizedBox(height: 12),
+                if (order.customerPhone != null && order.customerPhone!.isNotEmpty)
+                  _buildInfoRow(Icons.phone, order.customerPhone!),
+                if (order.businessName != null && order.businessName!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: _buildInfoRow(Icons.storefront, order.businessName!),
+                  ),
+                if (order.deliveryAddress.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Icon(Icons.location_pin, size: 20, color: AppColors.brandMuted),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Plot 44, Independence Avenue, Lusaka',
-                          style: TextStyle(color: AppColors.brandSecondary, fontWeight: FontWeight.w500),
+                          order.deliveryAddress,
+                          style: const TextStyle(color: AppColors.brandSecondary, fontWeight: FontWeight.w500),
                         ),
                       ),
                     ],
                   ),
                 ],
-              ),
+                if (order.riderName != null && order.riderName!.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  _buildInfoRow(Icons.delivery_dining, order.riderName!),
+                ],
+              ],
             ),
-            const SizedBox(height: 16),
-            SoftCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Order Items',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+          ),
+          const SizedBox(height: 16),
+          SoftCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Order Items',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark),
+                ),
+                const SizedBox(height: 16),
+                if (order.items.isEmpty)
+                  const Text('No items in this order.', style: TextStyle(color: AppColors.brandMuted))
+                else
+                  ...order.items.map((CartItem item) => Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Row(
                           children: [
-                            Text('Royal Elephant Tote', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark)),
-                            Text('Qty: 1', style: TextStyle(color: AppColors.brandMuted, fontSize: 12)),
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.shopping_bag, size: 20, color: AppColors.brandMuted),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark)),
+                                  Text('Qty: ${item.quantity}', style: const TextStyle(color: AppColors.brandMuted, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              _formatCents(item.priceCents * item.quantity),
+                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                            ),
                           ],
                         ),
-                      ),
-                      const Text('K 1,200', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark)),
-                    ],
+                      )),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
+                    Text(
+                      _formatCents(order.totalCents),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.brandPrimary),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (order.invoiceNo != null && order.invoiceNo!.isNotEmpty)
+            SoftCard(
+              child: Row(
+                children: [
+                  const Icon(Icons.receipt, size: 20, color: AppColors.brandPrimary),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Invoice ${order.invoiceNo} • ${order.invoiceStatus ?? 'issued'}',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  const Divider(height: 1),
-                  const SizedBox(height: 16),
-                  const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
-                      PriceTag(amount: 1200),
-                    ],
+                  Text(
+                    'Payment: ${order.paymentStatus}',
+                    style: const TextStyle(color: AppColors.brandMuted, fontSize: 12),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Actions',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark),
+          const SizedBox(height: 16),
+          SoftCard(
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, size: 20, color: AppColors.brandSecondary),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Admins cannot reassign riders or refund orders from this app. Status changes are managed in the backend or the rider app. Contact admin support to refund this order.',
+                    style: TextStyle(color: AppColors.brandSecondary, fontSize: 13),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            SoftButton(
-              title: _rider != null ? 'Reassign Rider' : 'Assign Rider',
-              variant: SoftButtonVariant.primary,
-              icon: const Icon(Icons.delivery_dining, size: 20, color: AppColors.brandDark),
-              onPressed: () => setState(() => _riderModalVisible = true),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: TextButton(
+              onPressed: _load,
+              child: const Text('Refresh', style: TextStyle(color: AppColors.brandPrimary, fontWeight: FontWeight.bold)),
             ),
-            const SizedBox(height: 12),
-            SoftButton(
-              title: 'Issue Refund',
-              variant: SoftButtonVariant.outline,
-              icon: const Icon(Icons.money_off, size: 20, color: AppColors.error),
-              onPressed: _handleRefund,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -211,22 +292,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       children: [
         Icon(icon, size: 20, color: AppColors.brandMuted),
         const SizedBox(width: 12),
-        Text(text, style: const TextStyle(color: AppColors.brandSecondary, fontWeight: FontWeight.w500)),
+        Expanded(
+          child: Text(text, style: const TextStyle(color: AppColors.brandSecondary, fontWeight: FontWeight.w500)),
+        ),
       ],
     );
   }
-}
-
-class _AvailableRider {
-  final int id;
-  final String name;
-  final String status;
-  final String distance;
-
-  const _AvailableRider({
-    required this.id,
-    required this.name,
-    required this.status,
-    required this.distance,
-  });
 }

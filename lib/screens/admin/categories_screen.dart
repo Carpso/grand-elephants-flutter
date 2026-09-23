@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
-import 'package:sell_on_app/widgets/soft_button.dart';
+import 'package:sell_on_app/services/api_client.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/toast.dart';
 
@@ -14,34 +14,68 @@ class CategoriesScreen extends StatefulWidget {
 }
 
 class _CategoriesScreenState extends State<CategoriesScreen> {
-  bool _modalVisible = false;
-  final _nameController = TextEditingController();
-  final _iconController = TextEditingController();
+  bool _saving = false;
 
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _iconController.dispose();
-    super.dispose();
-  }
+  Future<void> _handleAdd() async {
+    final nameController = TextEditingController();
+    final iconController = TextEditingController();
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Category'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. Bags'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: iconController,
+              decoration: const InputDecoration(labelText: 'Icon', hintText: 'e.g. \u{1F45C}'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+    if (created != true || !mounted) return;
 
-  void _handleAdd() {
-    if (_nameController.text.isEmpty || _iconController.text.isEmpty) {
+    final name = nameController.text.trim();
+    final icon = iconController.text.trim();
+    if (name.isEmpty || icon.isEmpty) {
       ToastProvider.of(context).show('Name and Icon are required', ToastType.error);
       return;
     }
-    context.read<ConfigProvider>().addCategory(_nameController.text, _iconController.text);
-    setState(() => _modalVisible = false);
-    _nameController.clear();
-    _iconController.clear();
+
+    setState(() => _saving = true);
+    try {
+      await ApiClient.instance.post('/api/admin/categories', body: {'name': name, 'icon': icon});
+      if (!mounted) return;
+      context.read<ConfigProvider>().addCategory(name, icon);
+      ToastProvider.of(context).show('Category "$name" added.', ToastType.success);
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
-  void _deleteCategory(String id) {
+  void _deleteCategory(String id, String name) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirm Delete'),
-        content: const Text('Are you sure?'),
+        content: Text('Remove "$name"? There is no server endpoint to persist deletes, so this is local-only.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
@@ -69,7 +103,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add, color: AppColors.brandPrimary, size: 28),
-            onPressed: () => setState(() => _modalVisible = true),
+            onPressed: _saving ? null : _handleAdd,
           ),
         ],
       ),
@@ -124,7 +158,7 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                           children: [
                             Expanded(
                               child: TextButton(
-                                onPressed: () => _deleteCategory(cat.id),
+                                onPressed: () => _deleteCategory(cat.id, cat.name),
                                 style: TextButton.styleFrom(
                                   backgroundColor: Colors.red[50],
                                   padding: const EdgeInsets.symmetric(vertical: 8),

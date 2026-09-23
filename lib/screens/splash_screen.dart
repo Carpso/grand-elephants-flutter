@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/providers/auth_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/services/storage_service.dart';
 import 'package:sell_on_app/widgets/logo.dart';
@@ -44,6 +45,11 @@ class _SplashScreenState extends State<SplashScreen>
     final hasOnboarded =
         await StorageService.get<bool>('hasOnboarded');
     if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    if (auth.isLoggedIn) {
+      Navigator.of(context).pushReplacementNamed('/home');
+      return;
+    }
     if (hasOnboarded == true) {
       Navigator.of(context).pushReplacementNamed('/login');
     } else {

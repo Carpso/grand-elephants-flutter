@@ -29,12 +29,6 @@ class _MarketingScreenState extends State<MarketingScreen> {
   Widget build(BuildContext context) {
     final appName = context.watch<ConfigProvider>().appName;
 
-    const scheduledPosts = [
-      _ScheduledPost(id: 1, date: 'Today, 2:00 PM', platform: 'Instagram', status: 'ready', title: 'Summer Sale Launch'),
-      _ScheduledPost(id: 2, date: 'Tomorrow, 10:00 AM', platform: 'Facebook', status: 'draft', title: 'New Shoe Collection'),
-      _ScheduledPost(id: 3, date: 'Fri, 12 Oct', platform: 'TikTok', status: 'scheduled', title: 'Viral Video - Behind Scenes'),
-    ];
-
     return Scaffold(
       appBar: AppBar(title: const Text('Marketing Suite')),
       body: Column(
@@ -97,7 +91,7 @@ class _MarketingScreenState extends State<MarketingScreen> {
             ),
           ),
           Expanded(
-            child: _activeTab == 'flyer' ? _buildFlyerView(appName) : _buildPlannerView(scheduledPosts),
+            child: _activeTab == 'flyer' ? _buildFlyerView(appName) : _buildPlannerView(),
           ),
         ],
       ),
@@ -226,27 +220,15 @@ class _MarketingScreenState extends State<MarketingScreen> {
     );
   }
 
-  Widget _buildPlannerView(List<_ScheduledPost> posts) {
+  Widget _buildPlannerView() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Content Calendar',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.brandDark),
-              ),
-              FloatingActionButton.small(
-                onPressed: () {
-                  ToastProvider.of(context).show('Opening Composer...', ToastType.info);
-                },
-                backgroundColor: AppColors.brandPrimary,
-                child: const Icon(Icons.add, color: AppColors.white, size: 20),
-              ),
-            ],
+          const Text(
+            'Content Calendar',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.brandDark),
           ),
           const SizedBox(height: 16),
           Container(
@@ -301,92 +283,30 @@ class _MarketingScreenState extends State<MarketingScreen> {
           const SizedBox(height: 16),
           const Text('SCHEDULED POSTS', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandMuted, fontSize: 10, letterSpacing: 1)),
           const SizedBox(height: 12),
-          ...posts.map((post) => Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: SoftCard(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: post.platform == 'Instagram'
-                              ? Colors.pink[100]
-                              : post.platform == 'Facebook'
-                                  ? Colors.blue[100]
-                                  : Colors.black,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(
-                          post.platform == 'Instagram'
-                              ? Icons.camera_alt
-                              : post.platform == 'Facebook'
-                                  ? Icons.facebook
-                                  : Icons.music_note,
-                          size: 24,
-                          color: post.platform == 'TikTok'
-                              ? AppColors.white
-                              : post.platform == 'Instagram'
-                                  ? const Color(0xFFC13584)
-                                  : const Color(0xFF1877F2),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(post.title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark)),
-                            Text(post.date, style: const TextStyle(color: AppColors.brandMuted, fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: post.status == 'ready'
-                              ? Colors.green[100]
-                              : post.status == 'scheduled'
-                                  ? Colors.blue[100]
-                                  : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          post.status,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 10,
-                            color: post.status == 'ready'
-                                ? Colors.green[700]
-                                : post.status == 'scheduled'
-                                    ? Colors.blue[700]
-                                    : AppColors.brandMuted,
-                          ),
-                        ),
-                      ),
-                    ],
+          SoftCard(
+            child: Row(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: AppColors.softSurface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.campaign, size: 24, color: AppColors.brandMuted),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Text(
+                    'Broadcast feature requires an admin push endpoint. No scheduled posts are available from the backend yet.',
+                    style: TextStyle(color: AppColors.brandMuted, fontSize: 13),
                   ),
                 ),
-              )),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
-}
-
-class _ScheduledPost {
-  final int id;
-  final String date;
-  final String platform;
-  final String status;
-  final String title;
-
-  const _ScheduledPost({
-    required this.id,
-    required this.date,
-    required this.platform,
-    required this.status,
-    required this.title,
-  });
 }

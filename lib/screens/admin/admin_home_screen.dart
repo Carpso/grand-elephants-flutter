@@ -165,17 +165,17 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 crossAxisSpacing: 12,
                 childAspectRatio: 3,
                 children: [
-                  _buildMenuCard(Icons.people, 'Manage Users', () {}),
-                  _buildMenuCard(Icons.settings, 'App Settings', () {}),
-                  _buildMenuCard(Icons.security, 'Security Logs', () {}),
+                  _buildMenuCard(Icons.people, 'Manage Users', () => Navigator.pushNamed(context, '/admin/users')),
+                  _buildMenuCard(Icons.settings, 'App Settings', () => Navigator.pushNamed(context, '/admin/settings')),
+                  _buildMenuCard(Icons.security, 'Security Logs', () => Navigator.pushNamed(context, '/admin/notifications')),
                 ],
               )
             else ...[
-              _buildMenuCard(Icons.people, 'Manage Users', () {}),
+              _buildMenuCard(Icons.people, 'Manage Users', () => Navigator.pushNamed(context, '/admin/users')),
               const SizedBox(height: 12),
-              _buildMenuCard(Icons.settings, 'App Settings', () {}),
+              _buildMenuCard(Icons.settings, 'App Settings', () => Navigator.pushNamed(context, '/admin/settings')),
               const SizedBox(height: 12),
-              _buildMenuCard(Icons.security, 'Security Logs', () {}),
+              _buildMenuCard(Icons.security, 'Security Logs', () => Navigator.pushNamed(context, '/admin/notifications')),
             ],
           ],
         ),

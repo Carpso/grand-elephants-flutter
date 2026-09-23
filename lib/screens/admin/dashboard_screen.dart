@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/providers/admin_provider.dart';
+import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 
 class DashboardScreen extends StatelessWidget {
@@ -21,136 +24,201 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final admin = context.watch<AdminProvider>();
+    final config = context.watch<ConfigProvider>();
+    final stats = admin.stats;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Dashboard')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Overview',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: AppColors.brandDark,
+      body: RefreshIndicator(
+        onRefresh: () => admin.loadStats(),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Overview',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.brandDark,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Welcome back, Admin.',
-              style: TextStyle(color: AppColors.brandMuted),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: SoftCard(
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: AppColors.softSurface,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.attach_money, color: AppColors.brandPrimary, size: 24),
-                        ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'TOTAL SALES',
-                          style: TextStyle(
-                            color: AppColors.brandMuted,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'K 12,450',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.brandDark,
-                          ),
-                        ),
-                      ],
+              const SizedBox(height: 4),
+              const Text(
+                'Live marketplace metrics',
+                style: TextStyle(color: AppColors.brandMuted),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.attach_money,
+                      label: 'TOTAL SALES',
+                      value: config.formatPrice(stats.gmvCents / 100),
                     ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: SoftCard(
-                    child: Column(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: AppColors.softSurface,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.shopping_bag, color: AppColors.brandPrimary, size: 24),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.shopping_bag,
+                      label: 'ORDERS',
+                      value: '${stats.orders}',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.group,
+                      label: 'USERS',
+                      value: '${stats.users}',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.inventory_2,
+                      label: 'PRODUCTS',
+                      value: '${stats.products}',
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.account_balance_wallet,
+                      label: 'BUSINESS WALLETS',
+                      value: config.formatPrice(stats.businessWalletCents / 100),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: _StatCard(
+                      icon: Icons.pending_actions,
+                      label: 'PENDING PAYOUTS',
+                      value: '${stats.pendingPayouts}',
+                    ),
+                  ),
+                ],
+              ),
+              if (stats.pendingBusinesses > 0) ...[
+                const SizedBox(height: 16),
+                SoftCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          shape: BoxShape.circle,
                         ),
-                        const SizedBox(height: 12),
-                        const Text(
-                          'ACTIVE ORDERS',
-                          style: TextStyle(
-                            color: AppColors.brandMuted,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          '18',
-                          style: TextStyle(
-                            fontSize: 22,
+                        child: const Icon(Icons.storefront, color: Colors.amber),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '${stats.pendingBusinesses} business application(s) awaiting approval',
+                          style: const TextStyle(
                             fontWeight: FontWeight.bold,
                             color: AppColors.brandDark,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Management',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.brandDark,
+              const SizedBox(height: 24),
+              const Text(
+                'Management',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.brandDark,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                mainAxisSpacing: 16,
-                crossAxisSpacing: 16,
-                childAspectRatio: 1.3,
+              const SizedBox(height: 16),
+              GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: 1.3,
+                ),
+                itemCount: _menuItems.length,
+                itemBuilder: (context, index) {
+                  final item = _menuItems[index];
+                  return _DashboardCard(
+                    title: item.title,
+                    icon: item.icon,
+                    color: item.color,
+                    onTap: () => Navigator.of(context).pushNamed(item.route),
+                  );
+                },
               ),
-              itemCount: _menuItems.length,
-              itemBuilder: (context, index) {
-                final item = _menuItems[index];
-                return _DashboardCard(
-                  title: item.title,
-                  icon: item.icon,
-                  color: item.color,
-                  onTap: () => Navigator.of(context).pushNamed(item.route),
-                );
-              },
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _StatCard({required this.icon, required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return SoftCard(
+      child: Column(
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: AppColors.softSurface,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: AppColors.brandPrimary, size: 24),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.brandMuted,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: AppColors.brandDark,
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -18,6 +18,12 @@ dependencies:
   path_provider: ^2.1.5
   lipila_flutter: ^1.0.3
   flutter_secure_storage: ^9.2.4
+  image_picker: ^1.2.2
+  flutter_map: ^7.0.2
+  vector_map_tiles: ^8.0.0
+  vector_map_tiles_pmtiles: ^1.5.0
+  vector_tile_renderer: ^5.2.1
+  latlong2: ^0.9.1
 
 dev_dependencies:
   flutter_test:
@@ -28,7 +34,6 @@ flutter:
   uses-material-design: true
   assets:
     - assets/logo.png
-    - assets/splash.png
     - assets/icon.png
     - assets/branding/
     - assets/images/

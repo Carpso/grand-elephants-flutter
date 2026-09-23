@@ -1,8 +1,8 @@
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/product.dart';
 import '../models/cart_item.dart';
 import '../services/storage_service.dart';
+import '../services/api_client.dart';
 
 class CartProvider extends ChangeNotifier {
   List<CartItem> _items = [];
@@ -96,6 +96,7 @@ class CartProvider extends ChangeNotifier {
         id: product.id,
         name: product.name,
         price: product.price,
+        priceCents: product.priceCents,
         image: product.image,
       ));
     }
@@ -114,6 +115,7 @@ class CartProvider extends ChangeNotifier {
         id: product.id,
         name: product.name,
         price: product.price,
+        priceCents: product.priceCents,
         image: product.image,
         quantity: quantity,
       ));
@@ -134,61 +136,81 @@ class CartProvider extends ChangeNotifier {
     await _persistCart();
   }
 
-  Future<Order?> placeOrder({
+  /// Places the order server-side (payment collected via Lipila server webhook).
+  /// Returns the server order and clears the cart on success.
+  Future<Order?> submitOrder({
     required String paymentMethod,
     required String deliveryAddress,
     required String deliveryMethod,
+    double deliveryKm = 0,
     String? customerPhone,
-    String? transactionId,
-    String? referenceId,
     String? notes,
   }) async {
-    if (_userId == null || _userId!.isEmpty) return null;
     if (_items.isEmpty) return null;
 
-    // Generate secure order ID
-    final orderId = _generateOrderId();
+    final payload = {
+      'items': _items
+          .map((e) => {'productId': e.id, 'quantity': e.quantity})
+          .toList(),
+      'paymentMethod': paymentMethod,
+      'deliveryAddress': deliveryAddress,
+      'deliveryMethod': deliveryMethod,
+      'deliveryKm': deliveryKm,
+      'customerPhone': customerPhone ?? '',
+      'notes': notes ?? '',
+    };
 
-    final newOrder = Order(
-      id: orderId,
-      items: List.from(_items),
-      subtotal: subtotal,
-      deliveryFee: deliveryFee,
-      total: total,
-      date: DateTime.now().toIso8601String(),
-      status: 'Pending',
-      paymentMethod: paymentMethod,
-      paymentStatus: 'pending',
-      transactionId: transactionId,
-      referenceId: referenceId,
-      deliveryAddress: deliveryAddress,
-      deliveryMethod: deliveryMethod,
-      customerPhone: customerPhone,
-      notes: notes,
-    );
+    final res = await ApiClient.instance.post('/api/orders', body: payload);
+    final json = res as Map<String, dynamic>;
+    final order = Order.fromJson(json['order'] as Map<String, dynamic>);
 
-    _orders.insert(0, newOrder);
+    _orders.insert(0, order);
     _items.clear();
     _isDirty = true;
     await _persistOrders();
     await _persistCart();
-
-    try {
-      final globalOrders = await StorageService.get<List<dynamic>>('global_orders') ?? [];
-      globalOrders.insert(0, newOrder.toJson());
-      await StorageService.save('global_orders', globalOrders);
-    } catch (e) {
-      debugPrint('Error persisting global orders: $e');
-    }
-
     notifyListeners();
-    return newOrder;
+    return order;
   }
 
-  String _generateOrderId() {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final random = Random().nextInt(999999).toString().padLeft(6, '0');
-    return 'ORD-${timestamp.toString().substring(7)}-$random'.toUpperCase();
+  /// Refreshes the order list from the server.
+  Future<void> loadOrders() async {
+    try {
+      final res = await ApiClient.instance.get('/api/orders');
+      _orders = (res as List)
+          .map((e) => Order.fromJson(e as Map<String, dynamic>))
+          .toList();
+      await _persistOrders();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Order load failed: $e');
+    }
+  }
+
+  /// Fetches a single order from the server.
+  Future<Order?> fetchOrder(String orderId) async {
+    try {
+      final res = await ApiClient.instance.get('/api/orders/$orderId');
+      final order =
+          Order.fromJson((res as Map<String, dynamic>)['order'] as Map<String, dynamic>);
+      final index = _orders.indexWhere((o) => o.id == orderId);
+      if (index >= 0) {
+        _orders[index] = order;
+      } else {
+        _orders.insert(0, order);
+      }
+      notifyListeners();
+      return order;
+    } catch (e) {
+      debugPrint('Order fetch failed: $e');
+      return null;
+    }
+  }
+
+  /// Cancels a pending order on the server.
+  Future<void> cancelOrder(String orderId) async {
+    await ApiClient.instance.post('/api/orders/$orderId/cancel', body: {});
+    await loadOrders();
   }
 
   // Admin/rider methods to update order status

@@ -1,13 +1,9 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/cart_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
-import 'package:sell_on_app/providers/auth_provider.dart';
-import 'package:sell_on_app/services/lipila_payment_service.dart';
-import 'package:sell_on_app/providers/collection_number_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/toast.dart';
@@ -22,11 +18,9 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  final _addressController = TextEditingController(text: 'My Saved Address (Home)');
+  final _addressController = TextEditingController(text: 'Kabulonga, Lusaka');
   final _phoneController = TextEditingController();
-  final _cardNumberController = TextEditingController();
-  final _expiryController = TextEditingController();
-  final _cvcController = TextEditingController();
+  final _distanceController = TextEditingController(text: '3');
 
   _PaymentMethod _paymentMethod = _PaymentMethod.momo;
   bool _needTaxInvoice = false;
@@ -36,133 +30,59 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     _addressController.dispose();
     _phoneController.dispose();
-    _cardNumberController.dispose();
-    _expiryController.dispose();
-    _cvcController.dispose();
+    _distanceController.dispose();
     super.dispose();
-  }
-
-  void _handleAddressChange(String text) {
-    _addressController.text = text;
-    _addressController.selection = TextSelection.fromPosition(
-      TextPosition(offset: text.length),
-    );
-    final km = Random().nextInt(13) + 2;
-    context.read<CartProvider>().setDeliveryDistance(km.toDouble());
-  }
-
-  String? _validateCardNumber(String? value) {
-    if (value == null || value.isEmpty) return 'Card number is required';
-    final cleaned = value.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleaned.length < 13 || cleaned.length > 19) return 'Invalid card number';
-    return null;
-  }
-
-  String? _validateExpiry(String? value) {
-    if (value == null || value.isEmpty) return 'Expiry date is required';
-    if (!RegExp(r'^\d{2}/\d{2}$').hasMatch(value)) return 'Use MM/YY format';
-    return null;
-  }
-
-  String? _validateCvc(String? value) {
-    if (value == null || value.isEmpty) return 'CVC is required';
-    if (value.length < 3 || value.length > 4) return 'Invalid CVC';
-    return null;
   }
 
   Future<void> _handlePayment() async {
     final cart = context.read<CartProvider>();
-    final lipila = context.read<LipilaPaymentService>();
-    final collectionProvider = context.read<CollectionNumberProvider>();
 
     if (cart.items.isEmpty) {
       ToastProvider.of(context).show('Your cart is empty!', ToastType.error);
       return;
     }
 
-    if (_paymentMethod == _PaymentMethod.momo && _phoneController.text.isEmpty) {
-      ToastProvider.of(context).show('Please enter your phone number', ToastType.error);
-      return;
-    }
-
-    if (_paymentMethod == _PaymentMethod.card) {
-      if (_validateCardNumber(_cardNumberController.text) != null) {
-        ToastProvider.of(context).show('Please enter a valid card number', ToastType.error);
-        return;
-      }
-      if (_validateExpiry(_expiryController.text) != null) {
-        ToastProvider.of(context).show('Please enter a valid expiry date', ToastType.error);
-        return;
-      }
-      if (_validateCvc(_cvcController.text) != null) {
-        ToastProvider.of(context).show('Please enter a valid CVC', ToastType.error);
-        return;
-      }
-    }
+    final distanceKm = double.tryParse(_distanceController.text) ?? 0;
 
     setState(() => _isProcessing = true);
 
-    String? transactionId;
-    String? referenceId;
-
     try {
-      if (_paymentMethod == _PaymentMethod.momo) {
-        final collectionNumber = collectionProvider.getDefaultNumber();
-        if (collectionNumber == null) {
-          ToastProvider.of(context).show('No collection number configured. Contact support.', ToastType.error);
-          setState(() => _isProcessing = false);
-          return;
-        }
-
-        final result = await lipila.collectMobileMoney(
-          amount: cart.total,
-          customerPhone: _phoneController.text,
-          orderReference: 'ORD-${DateTime.now().millisecondsSinceEpoch}',
-          collectionNumber: collectionNumber,
-        );
-
-        if (result.success) {
-          transactionId = result.transactionId;
-          referenceId = result.referenceId;
-        } else {
-          ToastProvider.of(context).show(result.message ?? 'Payment failed', ToastType.error);
-          setState(() => _isProcessing = false);
-          return;
-        }
-      }
-
-      if (!mounted) return;
-
-      setState(() => _isProcessing = false);
-
-      final order = await cart.placeOrder(
+      final order = await cart.submitOrder(
         paymentMethod: _paymentMethod == _PaymentMethod.momo ? 'mobile_money' : 'card',
-        deliveryAddress: _addressController.text,
+        deliveryAddress: _addressController.text.trim(),
         deliveryMethod: 'standard',
-        customerPhone: _phoneController.text.isNotEmpty ? _phoneController.text : null,
-        transactionId: transactionId,
-        referenceId: referenceId,
+        deliveryKm: distanceKm,
+        customerPhone: _phoneController.text.trim(),
       );
 
       if (!mounted) return;
-
       setState(() => _isProcessing = false);
 
-      if (order != null) {
-        HapticFeedback.mediumImpact();
-        if (_needTaxInvoice) {
-          Navigator.of(context).pushReplacementNamed('/cart/receipt');
-        } else {
-          ToastProvider.of(context).show('Order Placed Successfully!', ToastType.success);
-          Navigator.of(context).pushReplacementNamed('/home');
-        }
-      } else {
+      if (order == null) {
         ToastProvider.of(context).show('Failed to place order. Please try again.', ToastType.error);
+        return;
+      }
+
+      HapticFeedback.mediumImpact();
+
+      if (_paymentMethod == _PaymentMethod.card) {
+        ToastProvider.of(context).show(
+          'Order placed. Complete card payment from the link sent.',
+          ToastType.info,
+        );
+        Navigator.of(context).pushReplacementNamed('/cart/checkout/success', arguments: order.id);
+        return;
+      }
+
+      if (_needTaxInvoice) {
+        Navigator.of(context).pushReplacementNamed('/cart/receipt', arguments: order.id);
+      } else {
+        Navigator.of(context).pushReplacementNamed('/cart/checkout/success', arguments: order.id);
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _isProcessing = false);
-      ToastProvider.of(context).show('Payment error: $e', ToastType.error);
+      ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
     }
   }
 
@@ -206,7 +126,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       Expanded(
                         child: TextField(
                           controller: _addressController,
-                          onChanged: _handleAddressChange,
                           style: TextStyle(
                             color: AppColors.brandSecondary,
                             fontWeight: FontWeight.bold,
@@ -219,9 +138,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ],
                   ),
                 ),
+                const SizedBox(height: 12),
+                Text(
+                  'Distance (km) — affects the delivery fee',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _distanceController,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    LengthLimitingTextInputFormatter(4),
+                  ],
+                  decoration: InputDecoration(
+                    hintText: 'e.g. 3',
+                    filled: true,
+                    fillColor: const Color(0xFFF9FAFB),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.shade100),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 8),
                 Text(
-                  'Typing changes distance calculation (Simulated)',
+                  'Delivery fee: K25 + K10/km · 16% VAT applies on the order total',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade400, fontStyle: FontStyle.italic),
                 ),
               ],
@@ -273,8 +215,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Delivery Fee', style: TextStyle(color: AppColors.brandMuted)),
-                    Text(config.formatPrice(cart.deliveryFee), style: TextStyle(color: AppColors.textPrimary)),
+                    Text('Delivery Fee (est.)', style: TextStyle(color: AppColors.brandMuted)),
+                    Text(
+                      config.formatPrice((double.tryParse(_distanceController.text) ?? 0) > 0
+                          ? 25 + (double.tryParse(_distanceController.text) ?? 0) * 10
+                          : cart.deliveryFee),
+                      style: TextStyle(color: AppColors.textPrimary),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -282,7 +229,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Total',
+                      'Total (excl. VAT)',
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
@@ -298,6 +245,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Final total incl. 16% VAT and payment fees is quoted on the order.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
               ],
             ),
@@ -336,55 +288,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
           const SizedBox(height: 24),
           if (_paymentMethod == _PaymentMethod.momo) ...[
-            Text('Select Provider', style: TextStyle(color: AppColors.brandMuted)),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: SoftButton(
-                    title: 'MTN Money',
-                    variant: SoftButtonVariant.primary,
-                    onPressed: () {},
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: SoftButton(
-                    title: 'Airtel Money',
-                    variant: SoftButtonVariant.primary,
-                    onPressed: () {},
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Text('Mobile Number', style: TextStyle(color: AppColors.brandMuted)),
+            Text('Mobile Number (receives the payment prompt)', style: TextStyle(color: AppColors.brandMuted)),
             const SizedBox(height: 8),
             TextField(
               controller: _phoneController,
               keyboardType: TextInputType.phone,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(12)],
               decoration: InputDecoration(
-                hintText: '097xxxxxxx',
-                filled: true,
-                fillColor: AppColors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.shade200),
-                ),
-              ),
-            ),
-          ] else ...[
-            Text('Card Number', style: TextStyle(color: AppColors.brandMuted)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _cardNumberController,
-              keyboardType: TextInputType.number,
-              inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(19)],
-              decoration: InputDecoration(
-                hintText: '4000 0000 0000 0000',
+                hintText: '097xxxxxxx (optional — defaults to your account)',
                 filled: true,
                 fillColor: AppColors.white,
                 border: OutlineInputBorder(
@@ -394,43 +305,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _expiryController,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [LengthLimitingTextInputFormatter(5)],
-                    decoration: InputDecoration(
-                      hintText: 'MM/YY',
-                      filled: true,
-                      fillColor: AppColors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: TextField(
-                    controller: _cvcController,
-                    keyboardType: TextInputType.number,
-                    obscureText: true,
-                    inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(4)],
-                    decoration: InputDecoration(
-                      hintText: 'CVC',
-                      filled: true,
-                      fillColor: AppColors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            Text(
+              'A payment prompt is sent to your phone. Approve it to confirm the order.',
+              style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontStyle: FontStyle.italic),
+            ),
+          ] else ...[
+            Text(
+              'Card payments use a secure hosted checkout. You will receive a payment link after ordering.',
+              style: TextStyle(fontSize: 13, color: AppColors.brandMuted),
             ),
           ],
           const SizedBox(height: 24),
@@ -464,7 +346,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ),
           SoftButton(
-            title: _isProcessing ? 'Processing...' : 'Pay ${config.formatPrice(cart.total)}',
+            title: _isProcessing ? 'Placing Order...' : 'Place Order',
             variant: SoftButtonVariant.primary,
             onPressed: _isProcessing ? null : _handlePayment,
           ),

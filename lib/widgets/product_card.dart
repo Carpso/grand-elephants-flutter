@@ -3,6 +3,7 @@ import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/models/product.dart';
 import 'package:sell_on_app/utils/spring_curve.dart';
 import 'package:sell_on_app/widgets/price_tag.dart';
+import 'package:sell_on_app/widgets/product_image.dart';
 import 'package:sell_on_app/widgets/skeleton.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 
@@ -29,7 +30,6 @@ class ProductCard extends StatefulWidget {
 }
 
 class _ProductCardState extends State<ProductCard> with SingleTickerProviderStateMixin {
-  bool _imageLoaded = false;
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
   late Animation<double> _scaleAnim;
@@ -134,32 +134,11 @@ class _ProductCardState extends State<ProductCard> with SingleTickerProviderStat
           ),
           child: Stack(
             children: [
-              if (!_imageLoaded)
-                const Positioned.fill(
-                  child: Skeleton(height: 192, borderRadius: 0),
-                ),
-              Image.asset(
-                widget.product.image,
+              ProductImage(
+                src: widget.product.image,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: double.infinity,
-                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
-                  if (wasSynchronouslyLoaded || frame != null) {
-                    if (!_imageLoaded) {
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (mounted) setState(() => _imageLoaded = true);
-                      });
-                    }
-                    return child;
-                  }
-                  return child;
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    color: AppColors.softSurface,
-                    child: const Icon(Icons.image, color: AppColors.brandMuted, size: 48),
-                  );
-                },
               ),
               _buildBadges(),
             ],

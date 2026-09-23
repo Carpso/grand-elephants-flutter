@@ -17,11 +17,46 @@ class OrderDetailScreen extends StatefulWidget {
 }
 
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
+  Order? _order;
+  bool _loading = true;
+  bool _cancelling = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final orderId = ModalRoute.of(context)?.settings.arguments as String? ?? '';
+    final order = await context.read<CartProvider>().fetchOrder(orderId);
+    if (mounted) {
+      setState(() {
+        _order = order;
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _cancelOrder() async {
+    final orderId = ModalRoute.of(context)?.settings.arguments as String? ?? '';
+    setState(() => _cancelling = true);
+    try {
+      await context.read<CartProvider>().cancelOrder(orderId);
+      if (!mounted) return;
+      ToastProvider.of(context).show('Order cancelled', ToastType.info);
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      setState(() => _cancelling = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final orderId = ModalRoute.of(context)?.settings.arguments as String? ?? '';
-    final cart = context.watch<CartProvider>();
-    final order = cart.orders.where((o) => o.id == orderId).firstOrNull;
+    final order = _order;
 
     final displayId = order?.id ?? orderId;
     final displayDate = order?.date ?? '';
@@ -38,77 +73,76 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         foregroundColor: AppColors.brandDark,
         elevation: 0,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildStatusCard(displayStatus, displayDate, displayId),
-            const SizedBox(height: 24),
-            const Text(
-              'Items Ordered',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.brandDark,
-              ),
-            ),
-            const SizedBox(height: 16),
-            ...items.asMap().entries.map((entry) => _buildItemCard(entry.value, entry.key)),
-            const SizedBox(height: 16),
-            if (order != null) _buildInfoRow(order.deliveryAddress, order.paymentMethod),
-            const SizedBox(height: 24),
-            _buildSummary(displayTotal),
-            const SizedBox(height: 24),
-            if (order != null && order.isCancellable)
-              SoftButton(
-                title: 'Cancel Order',
-                variant: SoftButtonVariant.outline,
-                onPressed: () {
-                  HapticFeedback.heavyImpact();
-                  cart.updateOrderStatus(orderId, 'Cancelled');
-                  ToastProvider.of(context).show('Order cancelled', ToastType.info);
-                  Navigator.pop(context);
-                },
-              ),
-            const SizedBox(height: 12),
-            SoftButton(
-              title: 'Buy Again',
-              variant: SoftButtonVariant.primary,
-              onPressed: () {
-                HapticFeedback.heavyImpact();
-                for (final item in items) {
-                  cart.addToCartWithQuantity(
-                    Product(
-                      id: item.id,
-                      name: item.name,
-                      price: item.price,
-                      image: item.image,
-                      description: '',
-                      category: '',
-                      isGhost: false,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildStatusCard(displayStatus, displayDate, displayId),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Items Ordered',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brandDark,
                     ),
-                    quantity: item.quantity,
-                  );
-                }
-                  ToastProvider.of(context).show('${items.length} item(s) added to cart', ToastType.success);
-                  Navigator.pop(context);
-              },
+                  ),
+                  const SizedBox(height: 16),
+                  ...items.asMap().entries.map((entry) => _buildItemCard(entry.value, entry.key)),
+                  const SizedBox(height: 16),
+                  if (order != null) _buildInfoRow(order.deliveryAddress, order.paymentMethod),
+                  const SizedBox(height: 24),
+                  _buildSummary(displayTotal),
+                  const SizedBox(height: 24),
+                  if (order != null && order.isCancellable)
+                    SoftButton(
+                      title: _cancelling ? 'Cancelling...' : 'Cancel Order',
+                      variant: SoftButtonVariant.outline,
+                      onPressed: _cancelling ? null : _cancelOrder,
+                    ),
+                  const SizedBox(height: 12),
+                  SoftButton(
+                    title: 'Buy Again',
+                    variant: SoftButtonVariant.primary,
+                    onPressed: () {
+                      HapticFeedback.heavyImpact();
+                      for (final item in items) {
+                        context.read<CartProvider>().addToCartWithQuantity(
+                          Product(
+                            id: item.id,
+                            name: item.name,
+                            price: item.price,
+                            priceCents: item.priceCents,
+                            image: item.image,
+                            description: '',
+                            category: '',
+                            isGhost: false,
+                          ),
+                          quantity: item.quantity,
+                        );
+                      }
+                      ToastProvider.of(context).show('${items.length} item(s) added to cart', ToastType.success);
+                      Navigator.pop(context);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  if (order?.invoiceNo != null)
+                    SoftButton(
+                      title: 'Invoice ${order!.invoiceNo}',
+                      variant: SoftButtonVariant.secondary,
+                      icon: const Icon(Icons.file_download, size: 20, color: AppColors.brandPrimary),
+                      onPressed: () {
+                        HapticFeedback.mediumImpact();
+                        ToastProvider.of(context).show('Invoice issued: ${order.invoiceNo}', ToastType.info);
+                      },
+                    ),
+                  const SizedBox(height: 32),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            SoftButton(
-              title: 'Download Invoice',
-              variant: SoftButtonVariant.secondary,
-              icon: const Icon(Icons.file_download, size: 20, color: AppColors.brandPrimary),
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                ToastProvider.of(context).show('Invoice downloading...', ToastType.info);
-              },
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
-      ),
     );
   }
 

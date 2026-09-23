@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/widgets/soft_button.dart';
+import 'package:sell_on_app/providers/admin_provider.dart';
+import 'package:sell_on_app/services/api_client.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/toast.dart';
 
@@ -13,88 +15,108 @@ class EmployeesScreen extends StatefulWidget {
 
 class _EmployeesScreenState extends State<EmployeesScreen> {
   String _activeTab = 'team';
-  dynamic _selectedEmp;
-  bool _logsVisible = false;
+  bool _loadingLogs = false;
+  List<Map<String, dynamic>> _auditLogs = [];
 
-  List<Map<String, dynamic>> _employees = [
-    {'id': 1, 'name': 'Alice Smith', 'role': 'Sales Manager', 'salary': 'K 12,500', 'status': 'Active'},
-    {'id': 2, 'name': 'Bob Jones', 'role': 'Delivery Lead', 'salary': 'K 8,800', 'status': 'On Leave'},
-    {'id': 3, 'name': 'Charlie Day', 'role': 'Inventory Clerk', 'salary': 'K 6,500', 'status': 'Active'},
-  ];
-
-  List<Map<String, dynamic>> _requests = [
-    {'id': 101, 'name': 'David Banda', 'role': 'Rider Applicant', 'date': 'Today, 10:30 AM', 'bikeModel': 'Honda Ace 125'},
-    {'id': 102, 'name': 'Grace Mumba', 'role': 'Rider Applicant', 'date': 'Yesterday', 'bikeModel': 'Boxer 150'},
-  ];
-
-  final List<_ActivityLog> _mockLogs = const [
-    _ActivityLog(id: 1, action: 'Clock In', time: '07:58 AM', type: 'success'),
-    _ActivityLog(id: 2, action: 'Sale #POS-442 Completed', time: '09:12 AM', type: 'info'),
-    _ActivityLog(id: 3, action: 'Break Started', time: '12:00 PM', type: 'warning'),
-    _ActivityLog(id: 4, action: 'Break Ended', time: '12:30 PM', type: 'success'),
-    _ActivityLog(id: 5, action: 'Inventory Update (Shoes)', time: '02:15 PM', type: 'info'),
-  ];
-
-  void _openLogs(Map<String, dynamic> emp) {
-    setState(() {
-      _selectedEmp = emp;
-      _logsVisible = true;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final admin = context.read<AdminProvider>();
+      admin.loadStats();
+      admin.loadRiders();
+      _loadAuditLogs();
     });
   }
 
-  void _handleApprove(Map<String, dynamic> req) {
-    showDialog(
+  Future<void> _loadAuditLogs() async {
+    setState(() => _loadingLogs = true);
+    try {
+      final res = await ApiClient.instance.get('/api/admin/actions');
+      if (mounted) {
+        setState(() {
+          _auditLogs = (res as List)
+              .map((e) => Map<String, dynamic>.from(e as Map))
+              .toList();
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _auditLogs = []);
+    } finally {
+      if (mounted) setState(() => _loadingLogs = false);
+    }
+  }
+
+  Future<void> _approveRider(Map<String, dynamic> app) async {
+    final name = app['name'] ?? 'Rider';
+    final admin = context.read<AdminProvider>();
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Approve Rider'),
-        content: Text('Are you sure you want to approve ${req['name']}?'),
+        content: Text('Are you sure you want to approve $name?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
-            onPressed: () {
-              setState(() {
-                _requests.removeWhere((r) => r['id'] == req['id']);
-                _employees.add({
-                  'id': req['id'],
-                  'name': req['name'],
-                  'role': 'Rider',
-                  'salary': 'K 5,000',
-                  'status': 'Active',
-                });
-              });
-              Navigator.pop(ctx);
-              ToastProvider.of(context).show('Rider approved and added to the team.', ToastType.success);
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Approve'),
           ),
         ],
       ),
     );
+    if (confirmed != true) return;
+    if (!mounted) return;
+    try {
+      await admin.approveRiderApplication('${app['id']}');
+      if (mounted) {
+        ToastProvider.of(context).show('$name approved and added to the team.', ToastType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    }
   }
 
-  void _handleReject(int id) {
-    showDialog(
+  Future<void> _rejectRider(Map<String, dynamic> app) async {
+    final name = app['name'] ?? 'Rider';
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Reject Application'),
-        content: const Text('This action cannot be undone.'),
+        content: Text('Reject $name? This cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           TextButton(
-            onPressed: () {
-              setState(() => _requests.removeWhere((r) => r['id'] == id));
-              Navigator.pop(ctx);
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
             child: const Text('Reject'),
           ),
         ],
       ),
     );
+    if (confirmed != true) return;
+    if (!mounted) return;
+    final admin = context.read<AdminProvider>();
+    try {
+      await ApiClient.instance.patch('/api/admin/users/${app['id']}',
+          body: {'riderStatus': 'rejected'});
+      await admin.loadRiders();
+      if (mounted) {
+        ToastProvider.of(context).show('$name rejected.', ToastType.info);
+      }
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final admin = context.watch<AdminProvider>();
+    final requests = admin.riderApplications;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Team Management')),
       body: Column(
@@ -104,188 +126,170 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _activeTab = 'team'),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _activeTab == 'team' ? AppColors.brandPrimary : AppColors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Text(
-                          'Active Team',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: _activeTab == 'team' ? AppColors.brandDark : AppColors.brandMuted,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  child: _buildTab('team', 'Active Team'),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 8),
                 Expanded(
-                  child: GestureDetector(
-                    onTap: () => setState(() => _activeTab = 'requests'),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      decoration: BoxDecoration(
-                        color: _activeTab == 'requests' ? AppColors.brandPrimary : AppColors.white,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Requests',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: _activeTab == 'requests' ? AppColors.brandDark : AppColors.brandMuted,
-                              ),
-                            ),
-                            if (_requests.isNotEmpty) ...[
-                              const SizedBox(width: 8),
-                              Container(
-                                width: 20,
-                                height: 20,
-                                decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
-                                child: Center(
-                                  child: Text(
-                                    '${_requests.length}',
-                                    style: const TextStyle(color: AppColors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  child: _buildTab('requests', 'Requests', badge: requests.length),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildTab('logs', 'Audit Log'),
                 ),
               ],
             ),
           ),
           Expanded(
-            child: _activeTab == 'team' ? _buildTeamView() : _buildRequestsView(),
+            child: _activeTab == 'team'
+                ? _buildTeamView(admin)
+                : _activeTab == 'requests'
+                    ? _buildRequestsView(requests)
+                    : _buildLogsView(),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildTeamView() {
-    return ListView.builder(
-      padding: const EdgeInsets.all(24),
-      itemCount: _employees.length,
-      itemBuilder: (context, index) {
-        final emp = _employees[index];
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: SoftCard(
-            child: Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: AppColors.softSurface,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          (emp['name'] as String)[0],
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: AppColors.brandMuted),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(emp['name'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.brandDark)),
-                          const SizedBox(height: 4),
-                          Text(
-                            emp['role'] as String,
-                            style: const TextStyle(color: AppColors.brandMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: emp['status'] == 'Active' ? Colors.green[100] : Colors.orange[100],
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        emp['status'] as String,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: emp['status'] == 'Active' ? Colors.green[700] : Colors.orange[700],
-                        ),
-                      ),
-                    ),
-                  ],
+  Widget _buildTab(String tab, String label, {int badge = 0}) {
+    final active = _activeTab == tab;
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: active ? AppColors.brandPrimary : AppColors.white,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  color: active ? AppColors.brandDark : AppColors.brandMuted,
                 ),
-                const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    RichText(
-                      text: TextSpan(
-                        children: [
-                          TextSpan(
-                            text: emp['salary'] as String,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.brandDark),
-                          ),
-                          const TextSpan(
-                            text: '/mo',
-                            style: TextStyle(fontWeight: FontWeight.normal, fontSize: 13, color: AppColors.brandMuted),
-                          ),
-                        ],
-                      ),
+              ),
+              if (badge > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  width: 20,
+                  height: 20,
+                  decoration: const BoxDecoration(color: AppColors.error, shape: BoxShape.circle),
+                  child: Center(
+                    child: Text(
+                      '$badge',
+                      style: const TextStyle(color: AppColors.white, fontSize: 10, fontWeight: FontWeight.bold),
                     ),
-                    Row(
-                      children: [
-                        SoftButton(
-                          title: 'Logs',
-                          variant: SoftButtonVariant.secondary,
-                          onPressed: () => _openLogs(emp),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: AppColors.softSurface,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(Icons.edit, size: 20, color: AppColors.brandSecondary),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ],
-            ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  Widget _buildRequestsView() {
-    if (_requests.isEmpty) {
+  Widget _buildTeamView(AdminProvider admin) {
+    final stats = admin.stats;
+    final riders = admin.riders.where((r) => r.status == 'approved').toList();
+
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Row(
+          children: [
+            Expanded(child: _buildStatTile(Icons.people, '${stats.users}', 'USERS')),
+            const SizedBox(width: 8),
+            Expanded(child: _buildStatTile(Icons.storefront, '${stats.businesses}', 'BUSINESSES')),
+            const SizedBox(width: 8),
+            Expanded(child: _buildStatTile(Icons.receipt_long, '${stats.orders}', 'ORDERS')),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Approved Riders (${riders.length})',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark),
+        ),
+        const SizedBox(height: 12),
+        if (riders.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 32),
+            child: Center(
+              child: Text('No approved riders yet.', style: TextStyle(color: AppColors.brandMuted)),
+            ),
+          )
+        else
+          ...riders.map((rider) => Padding(
+                padding: const EdgeInsets.only(bottom: 16),
+                child: SoftCard(
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: const BoxDecoration(color: AppColors.softSurface, shape: BoxShape.circle),
+                        child: Center(
+                          child: Text(
+                            rider.name.isNotEmpty ? rider.name[0].toUpperCase() : '?',
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.brandMuted),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(rider.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
+                            const SizedBox(height: 4),
+                            Text(
+                              rider.vehicle.isNotEmpty ? rider.vehicle : rider.phone,
+                              style: const TextStyle(color: AppColors.brandMuted, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.green[100],
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'Active',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green[700]),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )),
+      ],
+    );
+  }
+
+  Widget _buildStatTile(IconData icon, String value, String label) {
+    return SoftCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: AppColors.brandPrimary),
+          const SizedBox(height: 8),
+          Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+          Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequestsView(List<Map<String, dynamic>> requests) {
+    if (requests.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -300,9 +304,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
 
     return ListView.builder(
       padding: const EdgeInsets.all(24),
-      itemCount: _requests.length,
+      itemCount: requests.length,
       itemBuilder: (context, index) {
-        final req = _requests[index];
+        final req = requests[index];
+        final name = '${req['name'] ?? ''}';
+        final phone = '${req['phone'] ?? ''}';
+        final vehicle = '${req['vehicle'] ?? ''}';
         return Padding(
           padding: const EdgeInsets.only(bottom: 24),
           child: Container(
@@ -328,15 +335,15 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                       child: const Icon(Icons.person_add, color: Color(0xFF3B82F6), size: 24),
                     ),
                     const SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(req['name'] as String, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
-                        Text(
-                          '${req['role']} • ${req['date']}',
-                          style: const TextStyle(color: AppColors.brandMuted, fontSize: 12),
-                        ),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
+                          if (phone.isNotEmpty)
+                            Text(phone, style: const TextStyle(color: AppColors.brandMuted, fontSize: 12)),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -349,7 +356,10 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     children: [
                       const Text('VEHICLE DETAILS', style: TextStyle(color: AppColors.brandMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
                       const SizedBox(height: 4),
-                      Text(req['bikeModel'] as String, style: const TextStyle(color: AppColors.brandDark, fontWeight: FontWeight.w500)),
+                      Text(
+                        vehicle.isEmpty ? 'Not provided' : vehicle,
+                        style: const TextStyle(color: AppColors.brandDark, fontWeight: FontWeight.w500),
+                      ),
                     ],
                   ),
                 ),
@@ -358,7 +368,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: () => _handleReject(req['id'] as int),
+                        onPressed: () => _rejectRider(req),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: Colors.red[600],
                           side: const BorderSide(color: AppColors.error),
@@ -372,7 +382,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () => _handleApprove(req),
+                        onPressed: () => _approveRider(req),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.brandPrimary,
                           foregroundColor: AppColors.brandDark,
@@ -391,18 +401,62 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       },
     );
   }
-}
 
-class _ActivityLog {
-  final int id;
-  final String action;
-  final String time;
-  final String type;
+  Widget _buildLogsView() {
+    if (_loadingLogs) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_auditLogs.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.receipt_long, size: 64, color: AppColors.brandMuted),
+            const SizedBox(height: 16),
+            const Text('No admin actions recorded', style: TextStyle(color: AppColors.brandMuted, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+    }
 
-  const _ActivityLog({
-    required this.id,
-    required this.action,
-    required this.time,
-    required this.type,
-  });
+    return ListView.builder(
+      padding: const EdgeInsets.all(24),
+      itemCount: _auditLogs.length,
+      itemBuilder: (context, index) {
+        final log = _auditLogs[index];
+        final title = log['action'] ?? log['type'] ?? log['description'] ?? 'Admin action';
+        final subtitle = log['time'] ?? log['createdAt'] ?? log['email'] ?? '';
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: SoftCard(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.brandPrimary.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.history, size: 18, color: AppColors.brandPrimary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark)),
+                      if (subtitle.isNotEmpty)
+                        Text(subtitle, style: const TextStyle(color: AppColors.brandMuted, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

@@ -1,4 +1,32 @@
 import 'package:flutter/foundation.dart';
+import '../services/api_client.dart';
+
+class AppNotification {
+  final String id;
+  final String title;
+  final String message;
+  final String type;
+  final bool read;
+  final String createdAt;
+
+  const AppNotification({
+    required this.id,
+    required this.title,
+    required this.message,
+    required this.type,
+    required this.read,
+    required this.createdAt,
+  });
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) => AppNotification(
+        id: '${json['id']}',
+        title: json['title'] as String? ?? '',
+        message: json['message'] as String? ?? '',
+        type: json['type'] as String? ?? 'info',
+        read: json['read'] as bool? ?? false,
+        createdAt: json['createdAt'] as String? ?? '',
+      );
+}
 
 class NotificationSettings {
   bool stockAlerts;
@@ -25,20 +53,84 @@ class NotificationSettings {
 
 class NotificationProvider extends ChangeNotifier {
   String? _expoPushToken;
-  Map<String, dynamic>? _notification;
+  List<AppNotification> _notifications = [];
   NotificationSettings _settings = NotificationSettings();
+  bool _loading = false;
+  String? _error;
 
   String? get expoPushToken => _expoPushToken;
-  Map<String, dynamic>? get notification => _notification;
+  List<AppNotification> get notifications => _notifications;
   NotificationSettings get settings => _settings;
+  bool get loading => _loading;
+  String? get error => _error;
+  int get unreadCount => _notifications.where((n) => !n.read).length;
 
   NotificationProvider() {
     _init();
   }
 
   void _init() {
-    _expoPushToken = 'SIMULATED_TOKEN';
+    _load();
+  }
+
+  Future<void> _load() async {
+    _loading = true;
     notifyListeners();
+    try {
+      final res = await ApiClient.instance.get('/api/notifications/mine');
+      _notifications = (res as List)
+          .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      _error = '$e';
+      debugPrint('Notifications load failed: $e');
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> refresh() async {
+    await _load();
+  }
+
+  Future<void> markRead(String id) async {
+    try {
+      await ApiClient.instance.post('/api/notifications/$id/read', body: {});
+      final index = _notifications.indexWhere((n) => n.id == id);
+      if (index >= 0) {
+        _notifications[index] = AppNotification(
+          id: _notifications[index].id,
+          title: _notifications[index].title,
+          message: _notifications[index].message,
+          type: _notifications[index].type,
+          read: true,
+          createdAt: _notifications[index].createdAt,
+        );
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Mark read failed: $e');
+    }
+  }
+
+  Future<void> markAllRead() async {
+    try {
+      await ApiClient.instance.post('/api/notifications/read-all', body: {});
+      _notifications = _notifications
+          .map((n) => AppNotification(
+                id: n.id,
+                title: n.title,
+                message: n.message,
+                type: n.type,
+                read: true,
+                createdAt: n.createdAt,
+              ))
+          .toList();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Mark all read failed: $e');
+    }
   }
 
   void updateSettings({bool? stockAlerts, bool? orderUpdates, bool? promotions}) {
@@ -48,13 +140,5 @@ class NotificationProvider extends ChangeNotifier {
       promotions: promotions,
     );
     notifyListeners();
-  }
-
-  Future<void> sendStockAlert() async {
-    if (!_settings.stockAlerts) {
-      throw Exception('Please enable Stock Alerts first!');
-    }
-    await Future.delayed(const Duration(seconds: 2));
-    debugPrint("New Collection Dropped! The 'Golden Savannah' collection is now live.");
   }
 }

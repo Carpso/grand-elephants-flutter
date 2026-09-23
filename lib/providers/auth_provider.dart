@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import '../models/user.dart';
+import '../services/api_client.dart';
 import '../services/storage_service.dart';
-import '../services/database_service.dart';
-import '../utils/file_storage.dart';
 
 class AuthProvider extends ChangeNotifier {
   User? _user;
@@ -13,12 +11,13 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = true;
 
   Timer? _sessionTimer;
-  static const _sessionTimeout = Duration(minutes: 30);
+  static const _sessionTimeout = Duration(minutes: 60);
 
   User? get user => _user;
   String get role => _role;
   String get riderStatus => _riderStatus;
   bool get isLoading => _isLoading;
+  bool get isLoggedIn => _user != null;
 
   AuthProvider() {
     _initAuth();
@@ -32,6 +31,7 @@ class AuthProvider extends ChangeNotifier {
         _role = _user!.role;
         _riderStatus = _user!.riderStatus;
         _startSessionTimer();
+        _refreshProfile();
       }
     } catch (e) {
       debugPrint('Auth init error: $e');
@@ -40,84 +40,77 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _refreshProfile() async {
+    try {
+      final res = await ApiClient.instance.get('/api/me');
+      final json = (res as Map<String, dynamic>)['user'] as Map<String, dynamic>;
+      _user = User.fromJson(json);
+      _role = _user!.role;
+      _riderStatus = _user!.riderStatus;
+      await StorageService.save(StorageService.keyUser, _user!.toJson());
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Profile refresh failed: $e');
+    }
+  }
+
   void resetSession() {
     _sessionTimer?.cancel();
     _startSessionTimer();
   }
 
   void _startSessionTimer() {
-    _sessionTimer = Timer(_sessionTimeout, _onSessionExpired);
-  }
-
-  void _onSessionExpired() {
-    debugPrint('Session expired, logging out');
-    logout();
-  }
-
-  @override
-  void dispose() {
     _sessionTimer?.cancel();
-    super.dispose();
+    _sessionTimer = Timer(_sessionTimeout, () {
+      if (_user == null) return;
+      debugPrint('Session expired after 60 minutes of inactivity');
+      logout();
+    });
   }
 
-  static String? validatePassword(String password) {
-    if (password.length < 8) return 'Password must be at least 8 characters';
-    if (!password.contains(RegExp(r'[A-Z]'))) return 'Password must contain an uppercase letter';
-    if (!password.contains(RegExp(r'[a-z]'))) return 'Password must contain a lowercase letter';
-    if (!password.contains(RegExp(r'[0-9]'))) return 'Password must contain a number';
-    return null;
-  }
-
-  Future<void> signIn(String email, String pass) async {
-    final passwordError = validatePassword(pass);
-    if (passwordError != null) throw Exception(passwordError);
+  Future<void> requestOtp(String phone) async {
     _isLoading = true;
     notifyListeners();
     try {
-      await Future.delayed(const Duration(seconds: 1));
-      final uid = 'user_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
-      final loggedInUser = User(
-        uid: uid,
-        name: email.split('@').first,
-        email: email,
-        role: 'user',
-        riderStatus: 'none',
-      );
-      _user = loggedInUser;
-      _role = 'user';
-      await StorageService.save(StorageService.keyUser, loggedInUser.toJson());
-      _startSessionTimer();
-    } catch (e) {
+      await ApiClient.instance.post('/api/auth/request-otp', body: {'phone': phone}, withAuth: false);
+    } finally {
       _isLoading = false;
       notifyListeners();
-      rethrow;
     }
-    _isLoading = false;
-    notifyListeners();
   }
 
-  Future<void> signUp(String name, String email, String password) async {
-    final passwordError = validatePassword(password);
-    if (passwordError != null) throw Exception(passwordError);
-
+  /// Verifies the OTP and stores the session. Returns the fresh user.
+  Future<User> verifyOtp(String phone, String code, {String? name, String? email}) async {
     _isLoading = true;
     notifyListeners();
-    await Future.delayed(const Duration(seconds: 1));
-    final uid = 'user_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(999999)}';
-    final newUser = User(
-      uid: uid,
-      name: name,
-      email: email,
-      role: 'user',
-      riderStatus: 'none',
-    );
-    _user = newUser;
-    _role = 'user';
-    await StorageService.save(StorageService.keyUser, newUser.toJson());
-    await DatabaseService.syncUser(newUser.toJson());
-    _startSessionTimer();
-    _isLoading = false;
-    notifyListeners();
+    try {
+      final res = await ApiClient.instance.post(
+        '/api/auth/verify-otp',
+        body: {
+          'phone': phone,
+          'code': code,
+          if (name != null && name.isNotEmpty) 'name': name,
+          if (email != null && email.isNotEmpty) 'email': email,
+        },
+        withAuth: false,
+      );
+      final json = res as Map<String, dynamic>;
+      final token = json['token'] as String?;
+      if (token == null || token.isEmpty) {
+        throw const ApiException('No session returned by server');
+      }
+      await ApiClient.instance.setToken(token);
+      _user = User.fromJson(json['user'] as Map<String, dynamic>);
+      _role = _user!.role;
+      _riderStatus = _user!.riderStatus;
+      await StorageService.save(StorageService.keyUser, _user!.toJson());
+      _startSessionTimer();
+      notifyListeners();
+      return _user!;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> logout() async {
@@ -125,6 +118,7 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
+      await ApiClient.instance.setToken(null);
       await StorageService.remove(StorageService.keyUser);
       _user = null;
       _role = 'user';
@@ -136,68 +130,48 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> switchRole(String newRole) async {
+  Future<void> updateProfile({String? name, String? email}) async {
     if (_user == null) return;
-    if (_user!.role != 'superadmin') return;
-    _isLoading = true;
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 300));
-    _user = _user!.copyWith(role: newRole);
-    _role = newRole;
-    await StorageService.save(StorageService.keyUser, _user!.toJson());
-    if (newRole == 'rider' && (_riderStatus == 'none' || _riderStatus.isEmpty)) {
-      _riderStatus = 'pending';
-    } else if (newRole != 'rider') {
-      _riderStatus = 'none';
+    try {
+      final res = await ApiClient.instance.patch('/api/me', body: {
+        if (name != null && name.isNotEmpty) 'name': name,
+        if (email != null && email.isNotEmpty) 'email': email,
+      });
+      _user = User.fromJson((res as Map<String, dynamic>)['user'] as Map<String, dynamic>);
+      _role = _user!.role;
+      _riderStatus = _user!.riderStatus;
+      await StorageService.save(StorageService.keyUser, _user!.toJson());
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Profile update failed: $e');
+      rethrow;
     }
-    _isLoading = false;
-    notifyListeners();
   }
 
   Future<void> requestRiderAccess(Map<String, dynamic> details) async {
     if (_user == null) return;
     _isLoading = true;
     notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 500));
-    _riderStatus = 'pending';
-    _user = _user!.copyWith(
-      riderStatus: 'pending',
-      bikePhoto: details['bikePhoto'] as String?,
-    );
-    _isLoading = false;
-    notifyListeners();
+    try {
+      await ApiClient.instance.post('/api/riders/apply', body: {
+        'name': _user!.name,
+        'phone': _user!.phone,
+        'vehicle': details['vehicleType'] as String? ?? details['vehicle'] as String? ?? '',
+        'bikePhoto': details['bikePhoto'] as String?,
+      });
+      _riderStatus = 'pending';
+      _user = _user!.copyWith(riderStatus: 'pending', bikePhoto: details['bikePhoto'] as String?);
+      await StorageService.save(StorageService.keyUser, _user!.toJson());
+      notifyListeners();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  Future<void> updateUserProfile(String photoUri) async {
-    if (_user == null) return;
-    final savedUri = await FileStorage.saveImageLocally(photoUri);
-    _user = _user!.copyWith(profilePhoto: savedUri);
-    await StorageService.save(StorageService.keyUser, _user!.toJson());
-    await DatabaseService.syncUser(_user!.toJson());
-    notifyListeners();
-  }
-
-  Future<void> approveRider() async {
-    if (_user == null || (_user!.role != 'admin' && _user!.role != 'superadmin')) return;
-    _isLoading = true;
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 500));
-    _riderStatus = 'approved';
-    _user = _user!.copyWith(riderStatus: 'approved');
-    _isLoading = false;
-    notifyListeners();
-  }
-
-  Future<void> toggleRiderLocation(bool active) async {
-    if (_user == null || _user!.role != 'rider' || _riderStatus != 'approved') return;
-    _isLoading = true;
-    notifyListeners();
-    await Future.delayed(const Duration(milliseconds: 300));
-    final newLocation = active
-        ? const RiderLocation(lat: -26.2041, lng: 28.0473, address: 'Johannesburg, SA')
-        : null;
-    _user = _user!.copyWith(riderLocation: newLocation);
-    _isLoading = false;
-    notifyListeners();
+  @override
+  void dispose() {
+    _sessionTimer?.cancel();
+    super.dispose();
   }
 }

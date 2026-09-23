@@ -1,22 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/providers/app_data_provider.dart';
 import 'package:sell_on_app/providers/auth_provider.dart';
-
-class _ChatMessage {
-  final String id;
-  final String text;
-  final bool isUser;
-  final DateTime timestamp;
-
-  const _ChatMessage({
-    required this.id,
-    required this.text,
-    required this.isUser,
-    required this.timestamp,
-  });
-}
+import 'package:sell_on_app/widgets/toast.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -30,22 +17,14 @@ class _ChatScreenState extends State<ChatScreen> {
   final _scrollController = ScrollController();
   VoidCallback? _textListener;
 
-  List<_ChatMessage> _messages = [];
-  bool _isTyping = false;
-
   @override
   void initState() {
     super.initState();
-    _messages = [
-      _ChatMessage(
-        id: '1',
-        text: 'Hello! How can we help you today?',
-        isUser: false,
-        timestamp: DateTime.now(),
-      ),
-    ];
     _textListener = () => setState(() {});
     _messageController.addListener(_textListener!);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AppDataProvider>().loadChat();
+    });
   }
 
   @override
@@ -70,46 +49,37 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
-  void _handleSend() {
+  String _formatTime(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return '';
+    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _handleSend() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    final userMsg = _ChatMessage(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      text: text,
-      isUser: true,
-      timestamp: DateTime.now(),
-    );
-
-    setState(() {
-      _messages = [..._messages, userMsg];
-    });
     _messageController.clear();
     _scrollToBottom();
-
-    setState(() => _isTyping = true);
-    Timer(const Duration(seconds: 2), () {
-      if (!mounted) return;
-      setState(() {
-        _isTyping = false;
-        _messages = [
-          ..._messages,
-          _ChatMessage(
-            id: 'support_response',
-            text: 'Thanks for reaching out! One of our agents will be with you shortly.',
-            isUser: false,
-            timestamp: DateTime.now(),
-          ),
-        ];
-      });
+    try {
+      await context.read<AppDataProvider>().sendChatMessage(text);
       _scrollToBottom();
-    });
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context).show('Could not send message', ToastType.error);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final appData = context.watch<AppDataProvider>();
     final userName = auth.user?.name ?? 'User';
+    final messages = appData.messages;
+    final initials = userName.trim().isEmpty
+        ? 'U'
+        : userName.trim().split(RegExp(r'\s+')).first.substring(0, 1).toUpperCase();
 
     return Scaffold(
       appBar: AppBar(
@@ -119,161 +89,156 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       body: Column(
         children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            color: AppColors.brandPrimary.withValues(alpha: 0.12),
+            child: const Text(
+              'An agent will reply shortly.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.brandDark,
+              ),
+            ),
+          ),
           Expanded(
-            child: ListView(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              children: [
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 24),
-                    child: Text(
-                      'TODAY',
-                      style: TextStyle(
-                        color: AppColors.brandMuted,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-                ..._messages.map((msg) => Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Row(
-                        mainAxisAlignment: msg.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          if (!msg.isUser)
-                            Container(
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                color: AppColors.brandPrimary,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.08),
-                                    blurRadius: 4,
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.support_agent,
-                                size: 16,
-                                color: Colors.white,
-                              ),
-                            ),
-                          if (!msg.isUser) const SizedBox(width: 8),
-                          Flexible(
-                            child: Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: msg.isUser ? AppColors.brandDark : AppColors.white,
-                                borderRadius: BorderRadius.only(
-                                  topLeft: const Radius.circular(16),
-                                  topRight: const Radius.circular(16),
-                                  bottomLeft: msg.isUser
-                                      ? const Radius.circular(16)
-                                      : Radius.zero,
-                                  bottomRight: msg.isUser
-                                      ? Radius.zero
-                                      : const Radius.circular(16),
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.05),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              constraints: BoxConstraints(
-                                maxWidth: MediaQuery.of(context).size.width * 0.75,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    msg.text,
-                                    style: TextStyle(
-                                      color: msg.isUser ? Colors.white : AppColors.textPrimary,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Align(
-                                    alignment: Alignment.bottomRight,
-                                    child: Text(
-                                      '${msg.timestamp.hour.toString().padLeft(2, '0')}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
-                                      style: TextStyle(
-                                        fontSize: 10,
-                                        color: msg.isUser
-                                            ? Colors.white.withValues(alpha: 0.6)
-                                            : AppColors.brandMuted,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+            child: appData.loading && messages.isEmpty
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppColors.brandPrimary),
+                  )
+                : ListView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                    children: [
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 24),
+                          child: Text(
+                            'TODAY',
+                            style: TextStyle(
+                              color: AppColors.brandMuted,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          if (msg.isUser) const SizedBox(width: 8),
-                          if (msg.isUser)
-                            CircleAvatar(
-                              radius: 16,
-                              backgroundImage: NetworkImage(
-                                'https://ui-avatars.com/api/?name=$userName&background=random',
-                              ),
-                            ),
-                        ],
+                        ),
                       ),
-                    )),
-                if (_isTyping)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            color: AppColors.brandPrimary,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.08),
-                                blurRadius: 4,
+                      if (messages.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 40),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.forum_outlined, size: 48, color: AppColors.brandMuted),
+                              const SizedBox(height: 12),
+                              Text(
+                                'Send us a message and we\'ll get back to you.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: AppColors.brandMuted),
                               ),
                             ],
                           ),
-                          child: const Icon(
-                            Icons.support_agent,
-                            size: 16,
-                            color: Colors.white,
-                          ),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade200,
-                            borderRadius: BorderRadius.circular(100),
-                          ),
-                          child: Text(
-                            'Typing...',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
-                              color: AppColors.brandMuted,
+                      ...messages.map((msg) => Padding(
+                            padding: const EdgeInsets.only(bottom: 16),
+                            child: Row(
+                              mainAxisAlignment: msg.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (!msg.isUser)
+                                  Container(
+                                    width: 32,
+                                    height: 32,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.brandPrimary,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: Colors.white),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.08),
+                                          blurRadius: 4,
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.support_agent,
+                                      size: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                if (!msg.isUser) const SizedBox(width: 8),
+                                Flexible(
+                                  child: Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: msg.isUser ? AppColors.brandDark : AppColors.white,
+                                      borderRadius: BorderRadius.only(
+                                        topLeft: const Radius.circular(16),
+                                        topRight: const Radius.circular(16),
+                                        bottomLeft: msg.isUser
+                                            ? const Radius.circular(16)
+                                            : Radius.zero,
+                                        bottomRight: msg.isUser
+                                            ? Radius.zero
+                                            : const Radius.circular(16),
+                                      ),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withValues(alpha: 0.05),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ],
+                                    ),
+                                    constraints: BoxConstraints(
+                                      maxWidth: MediaQuery.of(context).size.width * 0.75,
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          msg.text,
+                                          style: TextStyle(
+                                            color: msg.isUser ? Colors.white : AppColors.textPrimary,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Align(
+                                          alignment: Alignment.bottomRight,
+                                          child: Text(
+                                            _formatTime(msg.createdAt),
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: msg.isUser
+                                                  ? Colors.white.withValues(alpha: 0.6)
+                                                  : AppColors.brandMuted,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                if (msg.isUser) const SizedBox(width: 8),
+                                if (msg.isUser)
+                                  CircleAvatar(
+                                    radius: 16,
+                                    backgroundColor: AppColors.brandPrimary,
+                                    child: Text(
+                                      initials,
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.brandDark,
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
-                          ),
-                        ),
-                      ],
-                    ),
+                          )),
+                    ],
                   ),
-              ],
-            ),
           ),
           Container(
             padding: const EdgeInsets.all(16),

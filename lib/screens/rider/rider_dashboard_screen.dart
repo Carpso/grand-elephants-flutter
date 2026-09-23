@@ -2,10 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/models/cart_item.dart';
 import 'package:sell_on_app/providers/auth_provider.dart';
+import 'package:sell_on_app/providers/rider_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
-import 'package:sell_on_app/widgets/incoming_order_modal.dart';
 import 'package:sell_on_app/widgets/toast.dart';
 
 class RiderDashboardScreen extends StatefulWidget {
@@ -16,81 +17,62 @@ class RiderDashboardScreen extends StatefulWidget {
 }
 
 class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
-  bool _isOnline = false;
-  bool _hasActiveOrder = false;
-  bool _requestVisible = false;
-  Timer? _timer;
+  Timer? _refreshTimer;
 
   @override
-  void didUpdateWidget(covariant RiderDashboardScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
+  void initState() {
+    super.initState();
+    _refresh();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) => _refresh());
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _refreshTimer?.cancel();
     super.dispose();
   }
 
-  void _onOnlineChanged(bool value) {
-    setState(() {
-      _isOnline = value;
-      _hasActiveOrder = false;
-      _requestVisible = false;
-    });
-    _timer?.cancel();
-    if (value) {
-      _timer = Timer(const Duration(seconds: 3), () {
-        if (mounted && _isOnline && !_hasActiveOrder) {
-          setState(() => _requestVisible = true);
-        }
-      });
-    }
+  Future<void> _refresh() async {
+    if (mounted) context.read<RiderProvider>().load();
   }
 
-  void _handleAccept() {
-    setState(() {
-      _requestVisible = false;
-      _hasActiveOrder = true;
-    });
-  }
-
-  void _handleDecline() {
-    setState(() {
-      _requestVisible = false;
-      _isOnline = false;
-    });
-    _timer?.cancel();
-    if (mounted) {
-      ToastProvider.of(context).show('Request Declined - You are now Offline', ToastType.info);
+  Future<void> _completeDelivery(Order order) async {
+    try {
+      await context.read<RiderProvider>().updateOrderStatus(order.id, 'Delivered');
+      if (mounted) {
+        ToastProvider.of(context).show('Delivery completed for ${order.id}', ToastType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final rider = context.watch<RiderProvider>();
+    final active = rider.deliveries
+        .where((o) => o.status == 'Shipped' || o.status == 'Out for Delivery')
+        .toList();
 
     return Scaffold(
       body: SafeArea(
         child: Column(
           children: [
-            _buildHeader(auth),
+            _buildHeader(auth, rider),
             Expanded(
               child: ListView(
                 padding: EdgeInsets.zero,
                 children: [
-                  if (_isOnline && _hasActiveOrder)
-                    _buildActiveDelivery()
+                  if (active.isNotEmpty)
+                    ...active.map((o) => _buildActiveDelivery(o))
                   else
                     _buildIdleState(),
-                  _buildStats(),
+                  _buildStats(rider),
                 ],
               ),
-            ),
-            IncomingOrderModal(
-              visible: _requestVisible,
-              onAccept: _handleAccept,
-              onDecline: _handleDecline,
             ),
           ],
         ),
@@ -98,7 +80,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
     );
   }
 
-  Widget _buildHeader(AuthProvider auth) {
+  Widget _buildHeader(AuthProvider auth, RiderProvider rider) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
       decoration: BoxDecoration(
@@ -134,14 +116,17 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                       ],
                     ),
                     child: ClipOval(
-                      child: Image.network(
-                        'https://i.pravatar.cc/150?img=12',
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => const Icon(
-                          Icons.person,
-                          color: AppColors.brandMuted,
-                        ),
-                      ),
+                      child: auth.user?.profilePhoto != null &&
+                              auth.user!.profilePhoto!.isNotEmpty
+                          ? Image.network(
+                              auth.user!.profilePhoto!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Icon(
+                                Icons.person,
+                                color: AppColors.brandMuted,
+                              ),
+                            )
+                          : const Icon(Icons.person, color: AppColors.brandMuted),
                     ),
                   ),
                   const SizedBox(width: 16),
@@ -158,7 +143,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                         ),
                       ),
                       Text(
-                        auth.user?.name ?? 'Alex Rider',
+                        auth.user?.name ?? 'Rider',
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.bold,
@@ -189,19 +174,31 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  _isOnline ? 'YOU ARE ONLINE' : 'YOU ARE OFFLINE',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    letterSpacing: 1,
-                    color: _isOnline ? AppColors.brandAccent : AppColors.brandMuted,
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rider.isApproved ? 'APPROVED RIDER' : 'PENDING APPROVAL',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        letterSpacing: 1,
+                        color: rider.isApproved ? AppColors.brandAccent : AppColors.brandMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Balance: K ${rider.balance.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.brandMuted,
+                      ),
+                    ),
+                  ],
                 ),
-                Switch(
-                  value: _isOnline,
-                  onChanged: _onOnlineChanged,
-                  activeThumbColor: AppColors.brandAccent,
+                Icon(
+                  rider.isApproved ? Icons.verified : Icons.hourglass_empty,
+                  color: rider.isApproved ? AppColors.brandAccent : AppColors.brandMuted,
                 ),
               ],
             ),
@@ -211,7 +208,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
     );
   }
 
-  Widget _buildActiveDelivery() {
+  Widget _buildActiveDelivery(Order order) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: SoftCard(
@@ -234,18 +231,18 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Order #8821',
-                      style: TextStyle(
+                    Text(
+                      '#${order.id}',
+                      style: const TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.bold,
                         color: AppColors.brandDark,
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Pick up: Central Mall • 2.5km',
-                      style: TextStyle(fontSize: 14, color: AppColors.brandMuted),
+                    Text(
+                      '${order.businessName?.isNotEmpty == true ? order.businessName! : 'Shop'} • ${order.items.length} items',
+                      style: const TextStyle(fontSize: 14, color: AppColors.brandMuted),
                     ),
                   ],
                 ),
@@ -267,10 +264,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
             SoftButton(
               title: 'Complete Delivery',
               variant: SoftButtonVariant.primary,
-              onPressed: () {
-                setState(() => _hasActiveOrder = false);
-                ToastProvider.of(context).show('Great Job! Delivery Completed. +K 45.00', ToastType.success);
-              },
+              onPressed: () => _completeDelivery(order),
             ),
           ],
         ),
@@ -290,9 +284,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
               height: 96,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: _isOnline
-                    ? AppColors.brandAccent.withValues(alpha: 0.1)
-                    : Colors.grey.shade100,
+                color: Colors.grey.shade100,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.06),
@@ -301,20 +293,25 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                   ),
                 ],
               ),
-              child: Icon(
+              child: const Icon(
                 Icons.two_wheeler,
                 size: 48,
-                color: _isOnline ? AppColors.brandAccent : AppColors.brandMuted,
+                color: AppColors.brandMuted,
               ),
             ),
             const SizedBox(height: 24),
-            Text(
-              _isOnline ? 'Searching for jobs...' : 'Go Online to start',
-              style: const TextStyle(
+            const Text(
+              'No active deliveries',
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: AppColors.brandMuted,
               ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Assigned orders will appear here.',
+              style: TextStyle(fontSize: 13, color: AppColors.brandMuted),
             ),
           ],
         ),
@@ -322,7 +319,10 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
     );
   }
 
-  Widget _buildStats() {
+  Widget _buildStats(RiderProvider rider) {
+    final delivered = rider.deliveries.where((o) => o.status == 'Delivered').length;
+    final pending = rider.payouts.length;
+
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -331,7 +331,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
           const Padding(
             padding: EdgeInsets.only(left: 4, bottom: 16),
             child: Text(
-              "Today's Performance",
+              'Performance',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -346,8 +346,8 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                   icon: Icons.attach_money,
                   iconBgColor: AppColors.brandAccent.withValues(alpha: 0.1),
                   iconColor: AppColors.brandAccent,
-                  label: 'EARNINGS',
-                  value: 'K 450',
+                  label: 'BALANCE',
+                  value: 'K ${rider.balance.toStringAsFixed(2)}',
                   valueColor: AppColors.brandAccent,
                 ),
               ),
@@ -357,19 +357,19 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                   icon: Icons.delivery_dining,
                   iconBgColor: Colors.orange.shade50,
                   iconColor: AppColors.warning,
-                  label: 'TRIPS',
-                  value: '8',
+                  label: 'DELIVERED',
+                  value: '$delivered',
                   valueColor: AppColors.brandDark,
                 ),
               ),
               const SizedBox(width: 16),
               Expanded(
                 child: _buildStatCard(
-                  icon: Icons.star,
+                  icon: Icons.payments,
                   iconBgColor: Colors.yellow.shade50,
                   iconColor: Colors.amber,
-                  label: 'RATING',
-                  value: '4.9',
+                  label: 'PAYOUTS',
+                  value: '$pending',
                   valueColor: AppColors.brandDark,
                 ),
               ),

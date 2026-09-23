@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 
 class SoftInput extends StatefulWidget {
@@ -11,6 +12,8 @@ class SoftInput extends StatefulWidget {
   final bool obscureText;
   final ValueChanged<String>? onChanged;
   final int? maxLines;
+  final bool enabled;
+  final List<TextInputFormatter>? inputFormatters;
 
   const SoftInput({
     super.key,
@@ -23,6 +26,8 @@ class SoftInput extends StatefulWidget {
     this.obscureText = false,
     this.onChanged,
     this.maxLines = 1,
+    this.enabled = true,
+    this.inputFormatters,
   });
 
   @override
@@ -91,6 +96,8 @@ class _SoftInputState extends State<SoftInput> {
                     keyboardType: widget.keyboardType,
                     obscureText: widget.obscureText,
                     maxLines: widget.maxLines,
+                    enabled: widget.enabled,
+                    inputFormatters: widget.inputFormatters,
                     style: const TextStyle(
                       color: AppColors.brandDark,
                       fontWeight: FontWeight.w500,

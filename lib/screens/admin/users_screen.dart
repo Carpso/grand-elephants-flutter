@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/models/user.dart';
+import 'package:sell_on_app/providers/admin_provider.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});
@@ -10,185 +14,138 @@ class UsersScreen extends StatefulWidget {
 }
 
 class _UsersScreenState extends State<UsersScreen> {
-  List<_UserData> _users = [
-    _UserData(id: 1, name: 'John Doe', email: 'john@example.com', role: 'Customer', status: 'Active', joined: 'Oct 2025'),
-    _UserData(id: 2, name: 'Sarah Connor', email: 'sarah@example.com', role: 'Customer', status: 'Banned', joined: 'Nov 2025'),
-    _UserData(id: 3, name: 'Kyle Reese', email: 'kyle@example.com', role: 'Rider', status: 'Active', joined: 'Sep 2025'),
-    _UserData(id: 4, name: 'Jane Austen', email: 'jane@books.com', role: 'Customer', status: 'Active', joined: 'Dec 2025'),
-  ];
+  String _query = '';
 
-  void _toggleStatus(int id) {
-    setState(() {
-      _users = _users.map((u) {
-        if (u.id == id) {
-          final newStatus = u.status == 'Active' ? 'Banned' : 'Active';
-          return _UserData(id: u.id, name: u.name, email: u.email, role: u.role, status: newStatus, joined: u.joined);
-        }
-        return u;
-      }).toList();
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AdminProvider>().loadUsers();
     });
   }
 
-  void _handleDelete(int id) {
-    showDialog(
+  Future<void> _changeRole(User user) async {
+    final roles = ['user', 'rider', 'business', 'employee', 'admin'];
+    final admin = context.read<AdminProvider>();
+    final role = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete User'),
-        content: const Text('Are you sure? This action is irreversible.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              setState(() => _users.removeWhere((u) => u.id == id));
-              Navigator.pop(ctx);
-            },
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Delete'),
+      builder: (ctx) => SimpleDialog(
+        title: Text('Set role for ${user.name}'),
+        children: roles
+            .map((r) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(ctx, r),
+                  child: Text(r.toUpperCase()),
+                ))
+            .toList(),
+      ),
+    );
+    if (role == null || role == user.role) return;
+    try {
+      await admin.updateUser(user.uid, role: role);
+      if (mounted) ToastProvider.of(context).show('Role updated to $role', ToastType.success);
+    } catch (e) {
+      if (mounted) ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final admin = context.watch<AdminProvider>();
+    final users = _query.isEmpty
+        ? admin.users
+        : admin.users
+            .where((u) =>
+                u.name.toLowerCase().contains(_query.toLowerCase()) ||
+                u.phone.contains(_query) ||
+                u.email.toLowerCase().contains(_query.toLowerCase()))
+            .toList();
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('User Management')),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: TextField(
+              onChanged: (v) => setState(() => _query = v),
+              decoration: InputDecoration(
+                hintText: 'Search by name, phone or email',
+                prefixIcon: const Icon(Icons.search),
+                filled: true,
+                fillColor: AppColors.softSurface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () => admin.loadUsers(),
+              child: users.isEmpty
+                  ? ListView(
+                      children: const [
+                        SizedBox(height: 120),
+                        Icon(Icons.people_outline, size: 56, color: AppColors.brandMuted),
+                        SizedBox(height: 12),
+                        Text(
+                          'No users found',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: AppColors.brandMuted),
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: users.length,
+                      itemBuilder: (context, index) {
+                        final user = users[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: SoftCard(
+                            onTap: () => _changeRole(user),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor: Colors.grey[100],
+                                  child: Text(
+                                    user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandMuted),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.brandDark)),
+                                      Text(user.phone, style: const TextStyle(color: AppColors.brandMuted, fontSize: 12)),
+                                      Text(user.email, style: const TextStyle(color: AppColors.brandMuted, fontSize: 11)),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    user.role.toUpperCase(),
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.brandSecondary),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
           ),
         ],
       ),
     );
   }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('User Management')),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(24),
-        itemCount: _users.length,
-        itemBuilder: (context, index) {
-          final user = _users[index];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-            child: SoftCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CircleAvatar(
-                        backgroundColor: Colors.grey[100],
-                        child: Text(
-                          user.name[0],
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandMuted),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
-                            Text(user.email, style: const TextStyle(color: AppColors.brandMuted, fontSize: 12)),
-                          ],
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: user.status == 'Active' ? Colors.green[100] : Colors.red[100],
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          user.status,
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: user.status == 'Active' ? Colors.green[700] : Colors.red[700],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('ROLE', style: TextStyle(color: AppColors.brandMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                            const SizedBox(height: 4),
-                            Text(user.role, style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.brandSecondary)),
-                          ],
-                        ),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('JOINED', style: TextStyle(color: AppColors.brandMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                            const SizedBox(height: 4),
-                            Text(user.joined, style: const TextStyle(fontWeight: FontWeight.w500, color: AppColors.brandSecondary)),
-                          ],
-                        ),
-                        Switch(
-                          value: user.status == 'Active',
-                          onChanged: (_) => _toggleStatus(user.id),
-                          activeThumbColor: AppColors.brandPrimary,
-                          activeTrackColor: AppColors.success,
-                          inactiveTrackColor: AppColors.error,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              title: const Text('Reset Password'),
-                              content: Text('Send reset email to ${user.email}?'),
-                              actions: [
-                                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-                                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Send')),
-                              ],
-                            ),
-                          );
-                        },
-                        child: const Text('Reset Password', style: TextStyle(color: AppColors.brandPrimary, fontWeight: FontWeight.bold, fontSize: 13)),
-                      ),
-                      const SizedBox(width: 16),
-                      TextButton(
-                        onPressed: () => _handleDelete(user.id),
-                        child: const Text('Delete', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold, fontSize: 13)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-class _UserData {
-  final int id;
-  final String name;
-  final String email;
-  final String role;
-  final String status;
-  final String joined;
-
-  const _UserData({
-    required this.id,
-    required this.name,
-    required this.email,
-    required this.role,
-    required this.status,
-    required this.joined,
-  });
 }

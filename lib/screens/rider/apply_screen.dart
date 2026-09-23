@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/auth_provider.dart';
@@ -30,11 +32,11 @@ class _ApplyScreenState extends State<ApplyScreen> {
     super.dispose();
   }
 
-  void _pickImage() {
-    ToastProvider.of(context).show('Simulating Photo Upload...', ToastType.info);
-    setState(() {
-      _bikePhoto = 'https://placehold.co/400x300/D4AF37/white?text=Bike+Photo';
-    });
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final file = await picker.pickImage(source: ImageSource.gallery);
+    if (file == null) return;
+    setState(() => _bikePhoto = file.path);
   }
 
   void _handleSubmit() {
@@ -151,8 +153,8 @@ class _ApplyScreenState extends State<ApplyScreen> {
                     ],
                   ),
                   child: ClipOval(
-                    child: Image.network(
-                      'https://placehold.co/200x200/D4AF37/white?text=Join+Us',
+                    child: Image.asset(
+                      'assets/logo.png',
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => const Icon(
                         Icons.person,
@@ -236,12 +238,19 @@ class _ApplyScreenState extends State<ApplyScreen> {
               child: _bikePhoto != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: Image.network(
-                        _bikePhoto!,
-                        fit: BoxFit.cover,
-                        width: double.infinity,
-                        height: double.infinity,
-                      ),
+                      child: _bikePhoto!.startsWith('http')
+                          ? Image.network(
+                              _bikePhoto!,
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                            )
+                          : Image.file(
+                              File(_bikePhoto!),
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              height: double.infinity,
+                            ),
                     )
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,

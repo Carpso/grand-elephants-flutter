@@ -1,6 +1,6 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
+import '../services/api_client.dart';
 import '../services/storage_service.dart';
 
 class Category {
@@ -24,51 +24,29 @@ class Category {
       };
 
   factory Category.fromJson(Map<String, dynamic> json) => Category(
-        id: json['id'] as String,
-        name: json['name'] as String,
-        icon: json['icon'] as String,
+        id: '${json['id']}',
+        name: json['name'] as String? ?? '',
+        icon: json['icon'] as String? ?? '',
         enabled: json['enabled'] as bool? ?? true,
       );
 }
 
 class ConfigProvider extends ChangeNotifier {
   final String tenantId = 'sell-on-app-default';
-  String _appName = 'Sell On App';
+  String _appName = 'Grand Elephants';
   String _appSlogan = 'Premium Marketplace & Luxury Heritage';
   String _appDescription = 'A state-of-the-art retail platform for premium heritage products.';
   String _appLogo = '';
 
   String _currency = 'ZMW';
   String _theme = 'light';
-  double _exchangeRate = 0.036;
-  Timer? _exchangeRateTimer;
+  final double _exchangeRate = 0.036;
 
-  List<Category> _categories = [
-    Category(id: '1', name: 'Bags', icon: '👜'),
-    Category(id: '2', name: 'Shoes', icon: '👠'),
-    Category(id: '3', name: 'Jewelry', icon: '💍'),
-    Category(id: '4', name: 'Dresses', icon: '👗'),
-  ];
+  List<Category> _categories = [];
+  List<Map<String, dynamic>> _homeBanners = [];
 
   double _taxRate = 16.0;
   bool _maintenanceMode = false;
-
-  List<Map<String, dynamic>> _homeBanners = [
-    {
-      'id': '1',
-      'title': 'New Collection',
-      'subtitle': 'Premium Leather Bags',
-      'image': 'https://placehold.co/600x400/F59E0B/FFFFFF?text=New+Collection',
-      'link': '/product/1',
-    },
-    {
-      'id': '2',
-      'title': 'Summer Sale',
-      'subtitle': 'Up to 50% Off',
-      'image': 'https://placehold.co/600x400/D4AF37/FFFFFF?text=Summer+Sale',
-      'link': '/product/2',
-    },
-  ];
 
   String get appName => _appName;
   String get appSlogan => _appSlogan;
@@ -83,17 +61,11 @@ class ConfigProvider extends ChangeNotifier {
   List<Map<String, dynamic>> get homeBanners => _homeBanners;
 
   ConfigProvider() {
-    _loadConfig();
-    _startExchangeRateSimulation();
+    _loadLocal();
+    _loadFromApi();
   }
 
-  @override
-  void dispose() {
-    _exchangeRateTimer?.cancel();
-    super.dispose();
-  }
-
-  Future<void> _loadConfig() async {
+  Future<void> _loadLocal() async {
     try {
       final saved = await StorageService.get<Map<String, dynamic>>('appBranding');
       if (saved != null) {
@@ -104,16 +76,30 @@ class ConfigProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('Config load error: $e');
+      debugPrint('Config local load error: $e');
     }
   }
 
-  void _startExchangeRateSimulation() {
-    _exchangeRateTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      final fluctuation = (Random().nextDouble() - 0.5) * 0.0005;
-      _exchangeRate = double.parse((_exchangeRate + fluctuation).toStringAsFixed(5));
-      if (_currency == 'USD') notifyListeners();
-    });
+  Future<void> _loadFromApi() async {
+    try {
+      final res = await ApiClient.instance.get('/api/config', withAuth: false);
+      final cfg = res as Map<String, dynamic>;
+      _appName = cfg['appName'] as String? ?? _appName;
+      _appSlogan = cfg['appSlogan'] as String? ?? _appSlogan;
+      _appLogo = cfg['appLogo'] as String? ?? _appLogo;
+      _categories = (cfg['categories'] as List? ?? [])
+          .map((e) => Category.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _homeBanners = (cfg['banners'] as List? ?? [])
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      _taxRate = double.tryParse(
+              (cfg['feeInfo'] as Map<String, dynamic>?)?['vatPct']?.toString() ?? '') ??
+          _taxRate;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Config api fetch error: $e');
+    }
   }
 
   Future<void> updateAppIdentity(String name, String slogan, String description, String logo) async {
@@ -128,6 +114,15 @@ class ConfigProvider extends ChangeNotifier {
       'logo': logo,
     });
     notifyListeners();
+    try {
+      await ApiClient.instance.patch('/api/admin/settings', body: {
+        'app_name': name,
+        'app_slogan': slogan,
+        'app_logo': logo,
+      });
+    } catch (e) {
+      debugPrint('Settings save to API failed: $e');
+    }
   }
 
   void toggleCurrency() {

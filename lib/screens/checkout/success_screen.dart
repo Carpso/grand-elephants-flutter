@@ -1,8 +1,11 @@
-import 'dart:math';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lottie/lottie.dart';
+import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/models/cart_item.dart';
+import 'package:sell_on_app/providers/cart_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 
 class CheckoutSuccessScreen extends StatefulWidget {
@@ -13,8 +16,65 @@ class CheckoutSuccessScreen extends StatefulWidget {
 }
 
 class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
+  Order? _order;
+  Timer? _pollTimer;
+  bool _pending = true;
+  int _polls = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final orderId =
+        ModalRoute.of(context)?.settings.arguments as String?;
+    _load(orderId);
+  }
+
+  Future<void> _load(String? orderId) async {
+    if (orderId == null || orderId.isEmpty) {
+      final cart = context.read<CartProvider>();
+      if (cart.orders.isNotEmpty) {
+        _order = cart.orders.first;
+        _pending = _order!.paymentStatus == 'pending';
+      }
+      if (mounted) setState(() {});
+      return;
+    }
+    final order = await context.read<CartProvider>().fetchOrder(orderId);
+    if (mounted) {
+      setState(() {
+        _order = order;
+        _pending = order?.paymentStatus == 'pending';
+      });
+      if (_pending) _startPolling(orderId);
+    }
+  }
+
+  void _startPolling(String orderId) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
+      _polls++;
+      final order = await context.read<CartProvider>().fetchOrder(orderId);
+      if (!mounted) return;
+      setState(() {
+        _order = order;
+        _pending = order?.paymentStatus == 'pending';
+      });
+      if (!_pending || _polls >= 24) {
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final paid = _order?.paymentStatus == 'successful';
+    final status = _order?.status ?? 'Pending';
+
     return Scaffold(
       body: SafeArea(
         child: Padding(
@@ -25,10 +85,15 @@ class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
               SizedBox(
                 width: 200,
                 height: 200,
-                child: Lottie.network(
-                  'https://assets2.lottiefiles.com/packages/lf20_u4yrau.json',
-                  repeat: false,
-                ),
+                child: _pending
+                    ? Lottie.network(
+                        'https://assets2.lottiefiles.com/packages/lf20_5tl1xxnb.json',
+                        repeat: true,
+                      )
+                    : Lottie.network(
+                        'https://assets2.lottiefiles.com/packages/lf20_u4yrau.json',
+                        repeat: false,
+                      ),
               ).animate().scale(
                     begin: const Offset(0.8, 0.8),
                     duration: 600.ms,
@@ -38,7 +103,11 @@ class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
               Column(
                 children: [
                   Text(
-                    'Order Confirmed!',
+                    _pending
+                        ? 'Awaiting Payment'
+                        : paid
+                            ? 'Order Confirmed!'
+                            : 'Order Placed',
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
@@ -48,7 +117,7 @@ class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    '#ORD-${Random().nextInt(10000)}',
+                    '#${_order?.id ?? ''}',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -59,7 +128,11 @@ class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Text(
-                      'Thank you for your purchase. We are preparing your luxury items for shipment.',
+                      _pending
+                          ? 'A payment prompt was sent to your phone. Approve it and this screen will update automatically.'
+                          : paid
+                              ? 'Thank you for your purchase. Status: $status'
+                              : 'Your order was placed. Status: $status',
                       style: TextStyle(color: AppColors.brandMuted),
                       textAlign: TextAlign.center,
                     ),
@@ -68,12 +141,13 @@ class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
                   SizedBox(
                     width: double.infinity,
                     child: SoftButton(
-                      title: 'Track Order',
+                      title: 'View Order',
                       variant: SoftButtonVariant.primary,
                       icon: const Icon(Icons.local_shipping, size: 20, color: Colors.white),
                       onPressed: () {
                         Navigator.of(context).popUntil((route) => route.isFirst);
-                        Navigator.pushNamed(context, '/orders/track');
+                        Navigator.pushNamed(context, '/orders/${_order?.id ?? ''}',
+                            arguments: _order?.id);
                       },
                     ),
                   ),

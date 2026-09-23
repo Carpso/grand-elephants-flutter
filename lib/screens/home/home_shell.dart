@@ -7,6 +7,7 @@ import '../explore/explore_screen.dart';
 import '../rider/rider_home_screen.dart';
 import '../business/business_home_screen.dart';
 import '../admin/admin_home_screen.dart';
+import '../employee/employee_dashboard_screen.dart';
 import '../profile/profile_screen.dart';
 
 class _TabConfig {
@@ -29,6 +30,16 @@ const _roleTabs = <String, List<_TabConfig>>{
     _TabConfig('Deliveries', Icons.local_shipping_outlined, Icons.local_shipping, RiderHomeScreen()),
     _TabConfig('Profile', Icons.person_outlined, Icons.person, ProfileScreen()),
   ],
+  'business': [
+    _TabConfig('Home', Icons.home_outlined, Icons.home, HomeScreen()),
+    _TabConfig('Business', Icons.business_center_outlined, Icons.business_center, BusinessHomeScreen()),
+    _TabConfig('Profile', Icons.person_outlined, Icons.person, ProfileScreen()),
+  ],
+  'employee': [
+    _TabConfig('Home', Icons.home_outlined, Icons.home, HomeScreen()),
+    _TabConfig('Work', Icons.work_outline, Icons.work, EmployeeDashboardScreen()),
+    _TabConfig('Profile', Icons.person_outlined, Icons.person, ProfileScreen()),
+  ],
   'admin': [
     _TabConfig('Home', Icons.home_outlined, Icons.home, HomeScreen()),
     _TabConfig('Business', Icons.business_center_outlined, Icons.business_center, BusinessHomeScreen()),
@@ -39,11 +50,6 @@ const _roleTabs = <String, List<_TabConfig>>{
     _TabConfig('Home', Icons.home_outlined, Icons.home, HomeScreen()),
     _TabConfig('Business', Icons.business_center_outlined, Icons.business_center, BusinessHomeScreen()),
     _TabConfig('Admin', Icons.admin_panel_settings_outlined, Icons.admin_panel_settings, AdminHomeScreen()),
-    _TabConfig('Profile', Icons.person_outlined, Icons.person, ProfileScreen()),
-  ],
-  'employee': [
-    _TabConfig('Home', Icons.home_outlined, Icons.home, HomeScreen()),
-    _TabConfig('Business', Icons.business_center_outlined, Icons.business_center, BusinessHomeScreen()),
     _TabConfig('Profile', Icons.person_outlined, Icons.person, ProfileScreen()),
   ],
 };

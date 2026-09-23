@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/models/product.dart';
 import 'package:sell_on_app/providers/cart_provider.dart';
+import 'package:sell_on_app/providers/catalog_provider.dart';
+import 'package:sell_on_app/services/api_client.dart';
+import 'package:sell_on_app/widgets/product_image.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/price_tag.dart';
@@ -19,9 +22,6 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen>
     with SingleTickerProviderStateMixin {
-  final PageController _pageController = PageController();
-  int _activeSlide = 0;
-
   late final AnimationController _contentController;
   late final Animation<Offset> _contentSlide;
   late final Animation<double> _contentOpacity;
@@ -30,29 +30,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
   int _newRating = 5;
   final TextEditingController _reviewController = TextEditingController();
 
-  List<Map<String, String>> _reviews = [];
+  final List<Map<String, String>> _reviews = [];
 
-  Product get _product {
-    final found = Product.all.where((p) => p.id == widget.productId).firstOrNull;
-    return found ??
-        Product(
-          id: widget.productId,
-          name: 'Royal Elephant Tote',
-          price: 1200,
-          image: Product.all.isNotEmpty
-              ? Product.all.first.image
-              : 'https://placehold.co/600x600/F3F4F6/D4AF37?text=Product+Image',
-          description:
-              'Handcrafted from premium leather, features signature golden elephant emblem.',
-          category: 'Totes',
-        );
-  }
+  Product? _product;
+  bool _loading = true;
 
-  List<String> get _images => [
-        _product.image,
-        _product.image.replaceAll('.png', '_angle.png'),
-        _product.image.replaceAll('.png', '_detail.png'),
-      ];
+  Product? get _current => _product;
 
   @override
   void initState() {
@@ -72,234 +55,229 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
       CurvedAnimation(parent: _contentController, curve: Curves.easeInOut),
     );
     _contentController.forward();
+    _loadProduct();
+  }
 
-    _reviews = [
-      {
-        'id': '1',
-        'user': 'Sarah M.',
-        'rating': '5',
-        'comment': 'Absolutely stunning bag! The quality is unmatched.',
-        'date': '2d ago',
-      },
-      {
-        'id': '2',
-        'user': 'James K.',
-        'rating': '4',
-        'comment': 'Great design, fast delivery.',
-        'date': '1w ago',
-      },
-    ];
+  Future<void> _loadProduct() async {
+    final product =
+        await context.read<CatalogProvider>().fetchProduct(widget.productId);
+    if (mounted) {
+      setState(() {
+        _product = product;
+        _loading = false;
+      });
+    }
+    _loadReviews();
+  }
+
+  Future<void> _loadReviews() async {
+    try {
+      final res =
+          await ApiClient.instance.get('/api/products/${widget.productId}/reviews', withAuth: false);
+      final data = res as Map<String, dynamic>;
+      final list = (data['reviews'] as List? ?? [])
+          .map((e) => e as Map<String, dynamic>)
+          .toList();
+      if (!mounted) return;
+      setState(() {
+        _reviews
+          ..clear()
+          ..addAll(list.map((r) => {
+                'id': '${r['id']}',
+                'user': r['userName'] as String? ?? '',
+                'rating': '${r['rating']}',
+                'comment': r['comment'] as String? ?? '',
+                'date': r['createdAt'] as String? ?? '',
+              }));
+      });
+    } catch (e) {
+      debugPrint('Reviews load failed: $e');
+    }
   }
 
   @override
   void dispose() {
-    _pageController.dispose();
     _contentController.dispose();
     _reviewController.dispose();
     super.dispose();
   }
 
   void _handleAddToCart() {
-    context.read<CartProvider>().addToCart(_product);
+    final product = _current;
+    if (product == null) return;
+    context.read<CartProvider>().addToCart(product);
     ToastProvider.of(context).show('Added to Cart!', ToastType.success);
   }
 
-  void _handleAddReview() {
+  void _handleAddReview() async {
     if (_reviewController.text.trim().isEmpty) {
       ToastProvider.of(context).show('Please write a comment', ToastType.error);
       return;
     }
-    setState(() {
-      _reviews.insert(
-        0,
-        {
-          'id': DateTime.now().millisecondsSinceEpoch.toString(),
-          'user': 'Guest User',
-          'rating': _newRating.toString(),
-          'comment': _reviewController.text,
-          'date': 'Just now',
-        },
-      );
+    try {
+      await ApiClient.instance.post('/api/products/${widget.productId}/reviews', body: {
+        'rating': _newRating,
+        'comment': _reviewController.text,
+      });
+      if (!mounted) return;
+      ToastProvider.of(context).show('Review submitted!', ToastType.success);
       _reviewModalVisible = false;
       _reviewController.clear();
       _newRating = 5;
-    });
+      await _loadReviews();
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final product = _product;
+    final product = _current;
     final width = MediaQuery.of(context).size.width;
 
     return Scaffold(
       backgroundColor: AppColors.softSurface,
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              SliverAppBar(
-                expandedHeight: 450,
-                pinned: false,
-                backgroundColor: Colors.white,
-                leading: GestureDetector(
-                  onTap: () => Navigator.of(context).pop(),
-                  child: Container(
-                    margin: const EdgeInsets.only(left: 16, top: 8),
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Icon(
-                      Icons.arrow_back,
-                      color: Colors.white,
-                      size: 24,
-                    ),
-                  ),
-                ),
-                actions: [
-                  GestureDetector(
-                    onTap: () =>
-                        Navigator.of(context).pushNamed('/cart/checkout'),
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 16, top: 8),
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: const Icon(
-                        Icons.shopping_bag,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                ],
-                flexibleSpace: FlexibleSpaceBar(
-                  background: Stack(
-                    children: [
-                      PageView.builder(
-                        controller: _pageController,
-                        onPageChanged: (i) =>
-                            setState(() => _activeSlide = i),
-                        itemCount: _images.length,
-                        itemBuilder: (context, index) {
-                          return Container(
-                            width: width,
-                            height: 450,
-                            padding: const EdgeInsets.all(16),
-                            child: Image.asset(
-                              _images[index],
-                              fit: BoxFit.contain,
-                              errorBuilder: (context, error, stackTrace) =>
-                                  Container(
-                                color: AppColors.softSurface,
-                                child: const Icon(
-                                  Icons.image,
-                                  size: 80,
-                                  color: AppColors.brandMuted,
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      Positioned(
-                        bottom: 16,
-                        left: 0,
-                        right: 0,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: List.generate(_images.length, (i) {
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              width: i == _activeSlide ? 32 : 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(4),
-                                color: i == _activeSlide
-                                    ? AppColors.brandPrimary
-                                    : const Color(0xFFD1D5DB),
-                              ),
-                            );
-                          }),
+      body: _loading || product == null
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              children: [
+                CustomScrollView(
+                  slivers: [
+                    SliverAppBar(
+                      expandedHeight: 450,
+                      pinned: false,
+                      backgroundColor: Colors.white,
+                      leading: GestureDetector(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Container(
+                          margin: const EdgeInsets.only(left: 16, top: 8),
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Icon(
+                            Icons.arrow_back,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
-                  child: FadeTransition(
-                    opacity: _contentOpacity,
-                    child: SlideTransition(
-                      position: _contentSlide,
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 16),
-                          _buildProductInfo(product),
-                          const SizedBox(height: 32),
-                          _buildReviewsSection(),
-                        ],
+                      actions: [
+                        GestureDetector(
+                          onTap: () =>
+                              Navigator.of(context).pushNamed('/cart/checkout'),
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 16, top: 8),
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: Colors.black.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Icon(
+                              Icons.shopping_bag,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ],
+                      flexibleSpace: FlexibleSpaceBar(
+                        background: Stack(
+                          children: [
+                            Container(
+                              width: width,
+                              height: 450,
+                              padding: const EdgeInsets.all(16),
+                              child: ProductImage(
+                                src: product.image,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            Positioned(
+                              bottom: 16,
+                              left: 0,
+                              right: 0,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  AnimatedContainer(
+                                    duration: const Duration(milliseconds: 300),
+                                    width: 32,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(4),
+                                      color: AppColors.brandPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(24, 0, 24, 120),
+                        child: FadeTransition(
+                          opacity: _contentOpacity,
+                          child: SlideTransition(
+                            position: _contentSlide,
+                            child: Column(
+                              children: [
+                                const SizedBox(height: 16),
+                                _buildProductInfo(product),
+                                const SizedBox(height: 32),
+                                _buildReviewsSection(),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.9),
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 20,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  SoftButton(
-                    title: '',
-                    icon: const Icon(Icons.camera_alt,
-                        size: 24, color: Color(0xFF4B5563)),
-                    variant: SoftButtonVariant.ghost,
-                    onPressed: () =>
-                        Navigator.of(context).pushNamed('/try-on'),
-                    padding: const EdgeInsets.all(16),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: SoftButton(
-                      title: 'Add to Cart',
-                      variant: SoftButtonVariant.primary,
-                      onPressed: _handleAddToCart,
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.9),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(24),
+                        topRight: Radius.circular(24),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 20,
+                          offset: const Offset(0, -4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: SoftButton(
+                            title: 'Add to Cart',
+                            variant: SoftButtonVariant.primary,
+                            onPressed: _handleAddToCart,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+                if (_reviewModalVisible) _buildReviewModal(),
+              ],
             ),
-          ),
-          if (_reviewModalVisible) _buildReviewModal(),
-        ],
-      ),
     );
   }
 
@@ -328,7 +306,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        product.category.toUpperCase(),
+                        '${product.category.toUpperCase()}  ·  ${product.businessName.isEmpty ? '' : product.businessName.toUpperCase()}',
                         style: const TextStyle(
                           color: AppColors.brandMuted,
                           fontSize: 12,
@@ -380,8 +358,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
             ),
             Row(
               children: [
-                const Text(
-                  '4.8',
+                Text(
+                  _reviews.isEmpty ? '—' : (_reviews.map((r) => int.tryParse(r['rating'] ?? '0') ?? 0).reduce((a, b) => a + b) / _reviews.length).toStringAsFixed(1),
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppColors.brandDark,

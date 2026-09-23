@@ -1,11 +1,15 @@
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:sell_on_app/providers/rider_provider.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/toast.dart';
 
 class DeliveryCameraScreen extends StatefulWidget {
-  const DeliveryCameraScreen({super.key});
+  final String? orderId;
+
+  const DeliveryCameraScreen({super.key, this.orderId});
 
   @override
   State<DeliveryCameraScreen> createState() => _DeliveryCameraScreenState();
@@ -17,6 +21,15 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
   File? _photo;
   bool _isCameraReady = false;
   bool _hasPermission = false;
+  bool _submitting = false;
+  final TextEditingController _notesController = TextEditingController();
+
+  String get _orderId {
+    if (widget.orderId != null && widget.orderId!.isNotEmpty) {
+      return widget.orderId!;
+    }
+    return ModalRoute.of(context)?.settings.arguments as String? ?? '';
+  }
 
   @override
   void initState() {
@@ -29,6 +42,7 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
@@ -43,17 +57,25 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
   }
 
   Future<void> _initCamera() async {
-    final cameras = await availableCameras();
-    if (cameras.isEmpty) return;
-    final controller = CameraController(cameras.first, ResolutionPreset.medium);
-    _controller = controller;
     try {
-      await controller.initialize();
-      setState(() {
-        _isCameraReady = true;
-        _hasPermission = true;
-      });
-    } catch (e) {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        setState(() => _hasPermission = false);
+        return;
+      }
+      final controller = CameraController(cameras.first, ResolutionPreset.medium);
+      _controller = controller;
+      try {
+        await controller.initialize();
+        if (!mounted) return;
+        setState(() {
+          _isCameraReady = true;
+          _hasPermission = true;
+        });
+      } catch (e) {
+        setState(() => _hasPermission = false);
+      }
+    } catch (_) {
       setState(() => _hasPermission = false);
     }
   }
@@ -66,9 +88,34 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
     } catch (_) {}
   }
 
-  void _confirmDelivery() {
-    ToastProvider.of(context).show('Proof of delivery captured! Order Complete.', ToastType.success);
-    Navigator.of(context).maybePop();
+  Future<void> _confirmDelivery() async {
+    if (_submitting) return;
+    setState(() => _submitting = true);
+    final orderId = _orderId;
+    final notes = _notesController.text.trim();
+    try {
+      if (orderId.isNotEmpty) {
+        await context.read<RiderProvider>().updateOrderStatus(orderId, 'Delivered');
+        if (!mounted) return;
+        ToastProvider.of(context)
+            .show(notes.isEmpty
+                ? 'Order $orderId marked as Delivered!'
+                : 'Order $orderId delivered: $notes',
+                ToastType.success);
+      } else {
+        if (!mounted) return;
+        ToastProvider.of(context)
+            .show('Proof of delivery captured! Order Complete.', ToastType.success);
+      }
+      if (!mounted) return;
+      Navigator.of(context).maybePop();
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context)
+          .show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   @override
@@ -148,9 +195,11 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
               ),
-              child: const Text(
-                'Capture Proof of Delivery',
-                style: TextStyle(
+              child: Text(
+                _orderId.isNotEmpty
+                    ? 'Capture Proof of Delivery • #$_orderId'
+                    : 'Capture Proof of Delivery',
+                style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
                   fontSize: 14,
@@ -210,13 +259,37 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
                 colors: [Colors.black54, Colors.transparent],
               ),
             ),
-            child: const Text(
-              'Confirm Delivery',
+            child: Text(
+              _orderId.isNotEmpty ? 'Confirm Delivery • #$_orderId' : 'Confirm Delivery',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
+              ),
+            ),
+          ),
+        ),
+        Positioned(
+          left: 24,
+          right: 24,
+          bottom: 140,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+            ),
+            child: TextField(
+              controller: _notesController,
+              maxLines: 2,
+              style: const TextStyle(color: Colors.white),
+              decoration: const InputDecoration(
+                hintText: 'Add delivery notes (optional)',
+                hintStyle: TextStyle(color: Color(0xFF9CA3AF)),
+                border: InputBorder.none,
+                isDense: true,
               ),
             ),
           ),
@@ -240,11 +313,11 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
                 ),
               ),
               GestureDetector(
-                onTap: _confirmDelivery,
+                onTap: _submitting ? null : _confirmDelivery,
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: Colors.green,
+                    color: _submitting ? Colors.grey : Colors.green,
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
@@ -253,7 +326,16 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
                       ),
                     ],
                   ),
-                  child: const Icon(Icons.check, size: 40, color: Colors.white),
+                  child: _submitting
+                      ? const SizedBox(
+                          width: 40,
+                          height: 40,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 3,
+                          ),
+                        )
+                      : const Icon(Icons.check, size: 40, color: Colors.white),
                 ),
               ),
             ],

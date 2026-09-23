@@ -1,21 +1,24 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'constants/app_config.dart';
 import 'constants/app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
+import 'providers/catalog_provider.dart';
 import 'providers/config_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/wishlist_provider.dart';
 import 'providers/collection_number_provider.dart';
-import 'services/lipila_payment_service.dart';
+import 'providers/rider_provider.dart';
+import 'providers/admin_provider.dart';
+import 'providers/app_data_provider.dart';
 import 'screens/admin/collection_numbers_screen.dart' as admin_collections;
 import 'screens/splash_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/signup_screen.dart';
 import 'screens/home/home_shell.dart';
+import 'screens/explore/explore_screen.dart';
 import 'screens/product/product_detail_screen.dart';
 import 'screens/cart/checkout_screen.dart' as cart_checkout;
 import 'screens/cart/receipt_screen.dart';
@@ -32,6 +35,9 @@ import 'screens/profile/help_screen.dart';
 import 'screens/scan/scan_screen.dart';
 import 'screens/tryon/try_on_screen.dart';
 import 'screens/support/chat_screen.dart';
+import 'screens/rider/apply_screen.dart';
+import 'screens/business/business_home_screen.dart';
+import 'screens/business/business_dashboard_screen.dart';
 import 'screens/admin/admin_home_screen.dart';
 import 'screens/admin/dashboard_screen.dart' as admin_dash;
 import 'screens/admin/users_screen.dart';
@@ -46,6 +52,7 @@ import 'screens/admin/marketing_screen.dart';
 import 'screens/admin/admin_notifications_screen.dart';
 import 'screens/admin/admin_settings_screen.dart' as admin_settings;
 import 'screens/superadmin/collection_numbers_screen.dart';
+import 'widgets/toast.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,13 +73,16 @@ class SellOnApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ConfigProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => CatalogProvider()),
         ChangeNotifierProxyProvider<AuthProvider, CartProvider>(
           create: (_) => CartProvider(),
           update: (_, auth, cart) => cart!..loadForUser(auth.user?.uid),
         ),
         ChangeNotifierProvider(create: (_) => WishlistProvider()),
         ChangeNotifierProvider(create: (_) => CollectionNumberProvider()),
-        Provider(create: (_) => LipilaPaymentService()..initialize(apiKey: AppConfig.lipilaSecretKey, useSandbox: AppConfig.lipilaUseSandbox)),
+        ChangeNotifierProvider(create: (_) => RiderProvider()),
+        ChangeNotifierProvider(create: (_) => AdminProvider()),
+        ChangeNotifierProvider(create: (_) => AppDataProvider()),
       ],
       child: MaterialApp(
         title: 'Sell On App',
@@ -88,6 +98,7 @@ class SellOnApp extends StatelessWidget {
             '/login': (_) => const LoginScreen(),
             '/signup': (_) => const SignupScreen(),
             '/home': (_) => const HomeShell(),
+            '/explore': (_) => const ExploreScreen(),
             '/profile': (_) => const ProfileScreen(),
             '/profile/settings': (_) => const SettingsScreen(),
             '/profile/wishlist': (_) => const WishlistScreen(),
@@ -102,6 +113,10 @@ class SellOnApp extends StatelessWidget {
             '/scan': (_) => const ScanScreen(),
             '/try-on': (_) => const TryOnScreen(),
             '/support': (_) => const ChatScreen(),
+            '/support/chat': (_) => const ChatScreen(),
+            '/rider/apply': (_) => const ApplyScreen(),
+            '/business/dashboard': (_) => const BusinessDashboardScreen(),
+            '/business/home': (_) => const BusinessHomeScreen(),
             '/admin': (_) => const AdminHomeScreen(),
             '/admin/dashboard': (_) => const admin_dash.DashboardScreen(),
             '/admin/users': (_) => const UsersScreen(),
@@ -118,6 +133,36 @@ class SellOnApp extends StatelessWidget {
             '/superadmin/collection-numbers': (_) => const CollectionNumbersScreen(),
             '/admin/collection-numbers': (_) => const admin_collections.AdminCollectionNumbersScreen(),
           };
+
+          final adminOnlyRoutes = {
+            '/admin',
+            '/admin/dashboard',
+            '/admin/users',
+            '/admin/riders',
+            '/admin/employees',
+            '/admin/categories',
+            '/admin/banners',
+            '/admin/inventory',
+            '/admin/sales',
+            '/admin/finance',
+            '/admin/marketing',
+            '/admin/notifications',
+            '/admin/settings',
+            '/admin/collection-numbers',
+            '/superadmin/collection-numbers',
+          };
+
+          if (adminOnlyRoutes.contains(settings.name)) {
+            final auth = Provider.of<AuthProvider>(context, listen: false);
+            final role = auth.role;
+            if (role != 'admin' && role != 'superadmin') {
+              ToastProvider.of(context).show('You need admin access for that page', ToastType.error);
+              return MaterialPageRoute(
+                builder: (_) => const HomeShell(),
+                settings: settings,
+              );
+            }
+          }
 
           final builder = routes[settings.name];
           if (builder != null) return MaterialPageRoute(builder: builder, settings: settings);

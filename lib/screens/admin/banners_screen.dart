@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:sell_on_app/services/api_client.dart';
 import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/toast.dart';
@@ -16,7 +17,8 @@ class BannersScreen extends StatefulWidget {
 class _BannersScreenState extends State<BannersScreen> {
   final _titleController = TextEditingController();
   final _subtitleController = TextEditingController();
-  final _imageController = TextEditingController(text: 'https://placehold.co/600x400/F59E0B/FFFFFF?text=New+Banner');
+  final _imageController = TextEditingController();
+  bool _saving = false;
 
   @override
   void dispose() {
@@ -26,20 +28,30 @@ class _BannersScreenState extends State<BannersScreen> {
     super.dispose();
   }
 
-  void _handleCreate() {
+  Future<void> _handleCreate() async {
     if (_titleController.text.isEmpty || _subtitleController.text.isEmpty) {
       ToastProvider.of(context).show('Please fill in Title and Subtitle', ToastType.error);
       return;
     }
-    context.read<ConfigProvider>().addBanner({
-      'title': _titleController.text,
-      'subtitle': _subtitleController.text,
-      'image': _imageController.text,
-      'link': '/product/1',
-    });
-    _titleController.clear();
-    _subtitleController.clear();
-    ToastProvider.of(context).show('Banner added to Home Screen', ToastType.success);
+    setState(() => _saving = true);
+    try {
+      await ApiClient.instance.patch('/api/admin/settings', body: {
+        'banner_title': _titleController.text,
+        'banner_subtitle': _subtitleController.text,
+        'banner_image': _imageController.text,
+      });
+      if (!mounted) return;
+      _titleController.clear();
+      _subtitleController.clear();
+      _imageController.clear();
+      ToastProvider.of(context).show('Banner settings saved. Reload the app to refresh the carousel.', ToastType.success);
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -64,7 +76,7 @@ class _BannersScreenState extends State<BannersScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Manage the rotating carousel on the main page.',
+              'Banners below are loaded from /api/config. There is no banner write endpoint, so "Add Banner" persists the latest banner fields via /api/admin/settings.',
               style: TextStyle(color: AppColors.brandMuted),
             ),
             const SizedBox(height: 24),
@@ -98,7 +110,10 @@ class _BannersScreenState extends State<BannersScreen> {
                       decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
                       child: Stack(
                         children: [
-                          Image.network(_imageController.text, width: double.infinity, height: 160, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[200])),
+                          if (_imageController.text.isNotEmpty)
+                            Image.network(_imageController.text, width: double.infinity, height: 160, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[200]))
+                          else
+                            Container(width: double.infinity, height: 160, color: Colors.grey[200]),
                           Container(
                             color: Colors.black.withValues(alpha: 0.3),
                             child: Center(
@@ -122,7 +137,12 @@ class _BannersScreenState extends State<BannersScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  SoftButton(title: 'Add Banner', variant: SoftButtonVariant.primary, onPressed: _handleCreate),
+                  SoftButton(
+                    title: _saving ? 'Saving...' : 'Add Banner',
+                    variant: SoftButtonVariant.primary,
+                    isLoading: _saving,
+                    onPressed: _saving ? null : _handleCreate,
+                  ),
                 ],
               ),
             ),
@@ -160,7 +180,10 @@ class _BannersScreenState extends State<BannersScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.delete, color: AppColors.error, size: 20),
-                          onPressed: () => config.removeBanner(banner['id'] as String),
+                          onPressed: () {
+                            config.removeBanner(banner['id'] as String);
+                            ToastProvider.of(context).show('Banner removed (local only)', ToastType.info);
+                          },
                         ),
                       ],
                     ),

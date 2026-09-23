@@ -1,5 +1,7 @@
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/widgets/soft_button.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 import 'package:sell_on_app/widgets/toast.dart';
 
@@ -10,88 +12,94 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
-  bool _scanned = false;
-  bool _permissionGranted = false;
-  bool _permissionUnknown = true;
+class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
+  CameraController? _controller;
+  bool _initializing = true;
+  bool _cameraReady = false;
+  bool _navigating = false;
+  final TextEditingController _manualController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    _requestPermission();
+    WidgetsBinding.instance.addObserver(this);
+    _initCamera();
   }
 
-  Future<void> _requestPermission() async {
-    // Simulate camera permission request
-    await Future.delayed(const Duration(milliseconds: 500));
-    if (!mounted) return;
-    // In a real app, use permission_handler package
-    // For now, simulate granted
-    setState(() {
-      _permissionUnknown = false;
-      _permissionGranted = true;
-    });
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _controller?.dispose();
+    _manualController.dispose();
+    super.dispose();
   }
 
-  void _handleBarCodeScanned(Map<String, dynamic> result) {
-    if (_scanned) return;
-    setState(() => _scanned = true);
-    ToastProvider.of(context).show('Bar code with type ${result['type']} and data ${result['data']} has been scanned!', ToastType.info);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _scanned = false);
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (state == AppLifecycleState.resumed) {
+      controller.resumePreview();
+    } else if (state == AppLifecycleState.paused) {
+      controller.pausePreview();
+    }
+  }
+
+  Future<void> _initCamera() async {
+    if (mounted) {
+      setState(() {
+        _initializing = true;
+        _cameraReady = false;
+      });
+    }
+    try {
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        if (mounted) setState(() => _initializing = false);
+        return;
+      }
+      final controller = CameraController(
+        cameras.first,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      _controller = controller;
+      await controller.initialize();
+      if (!mounted) return;
+      setState(() {
+        _initializing = false;
+        _cameraReady = true;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _initializing = false;
+          _cameraReady = false;
+        });
+      }
+    }
+  }
+
+  void _handleScan() {
+    final raw = _manualController.text.trim();
+    final match = RegExp(r'\d+').firstMatch(raw);
+    final id = match?.group(0);
+    if (id == null || id.isEmpty) {
+      ToastProvider.of(context)
+          .show('Enter or scan a product ID containing digits', ToastType.error);
+      return;
+    }
+    if (_navigating) return;
+    _navigating = true;
+    ToastProvider.of(context).show('Product $id found', ToastType.success);
+    Navigator.of(context).pushNamed('/product/$id');
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) _navigating = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_permissionUnknown) {
-      return const Scaffold(
-        backgroundColor: AppColors.brandDark,
-        body: Center(),
-      );
-    }
-
-    if (!_permissionGranted) {
-      return Scaffold(
-        backgroundColor: AppColors.brandDark,
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'We need your permission to show the camera',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                SoftCard(
-                  onTap: _requestPermission,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 32,
-                      vertical: 16,
-                    ),
-                    child: const Text(
-                      'Grant Permission',
-                      style: TextStyle(
-                        color: AppColors.brandDark,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -101,65 +109,140 @@ class _ScanScreenState extends State<ScanScreen> {
       ),
       body: Stack(
         children: [
-          // Simulated camera view
-          Container(
-            color: Colors.black,
-            child: Center(
-              child: Container(
-                width: double.infinity,
-                height: double.infinity,
-                color: const Color(0xFF1A1A1A),
-                child: Stack(
-                  children: [
-                    // Scan area overlay
-                    Center(
-                      child: Container(
-                        width: 256,
-                        height: 256,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.5),
-                            width: 2,
-                          ),
-                          borderRadius: BorderRadius.circular(24),
-                          color: Colors.black.withValues(alpha: 0.1),
-                        ),
-                        child: GestureDetector(
-                          onTap: () => _handleBarCodeScanned({
-                            'type': 'qr',
-                            'data': 'product_12345',
-                          }),
-                          child: const Center(
-                            child: Text(
-                              'Align Code Here',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+          Positioned.fill(child: _buildCameraArea()),
+          _buildScanFrame(),
           Positioned(
             left: 24,
             right: 24,
-            bottom: 100,
-            child: SoftCard(
-              padding: const EdgeInsets.all(16),
-              child: const Text(
-                'Scan a tag to order or view details',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF374151),
+            bottom: 32,
+            child: _buildManualEntry(),
+          ),
+          Positioned(
+            top: 16,
+            right: 16,
+            child: GestureDetector(
+              onTap: _initCamera,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
                 ),
+                child: const Icon(Icons.refresh, color: Colors.white, size: 20),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCameraArea() {
+    if (_initializing) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.brandPrimary),
+      );
+    }
+    if (_cameraReady && _controller != null) {
+      return Center(child: CameraPreview(_controller!));
+    }
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.no_photography_outlined,
+            size: 64,
+            color: Colors.white.withValues(alpha: 0.4),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Camera unavailable on this device',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Use manual entry below to find a product.',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScanFrame() {
+    return Center(
+      child: Container(
+        width: 256,
+        height: 256,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2),
+          borderRadius: BorderRadius.circular(24),
+          color: Colors.black.withValues(alpha: 0.1),
+        ),
+        child: const Center(
+          child: Text(
+            'Align Code Here',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildManualEntry() {
+    return SoftCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'ENTER PRODUCT ID',
+            style: TextStyle(
+              color: AppColors.brandPrimary,
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 2,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppColors.softSurface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.qr_code_2, color: AppColors.brandSecondary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: _manualController,
+                    keyboardType: TextInputType.number,
+                    onSubmitted: (_) => _handleScan(),
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. 12345',
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: SoftButton(
+              title: 'Find Product',
+              variant: SoftButtonVariant.primary,
+              icon: const Icon(Icons.search, size: 20, color: Colors.black),
+              onPressed: _handleScan,
             ),
           ),
         ],

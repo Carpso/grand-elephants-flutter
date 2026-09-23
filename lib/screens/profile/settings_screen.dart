@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:sell_on_app/providers/notification_provider.dart';
+import 'package:sell_on_app/services/storage_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -11,12 +13,16 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _notifications = true;
-  bool _newsletter = false;
+  void _handleThemeToggle(ConfigProvider config) {
+    config.toggleTheme();
+    StorageService.save('theme', config.theme);
+  }
 
   @override
   Widget build(BuildContext context) {
     final config = context.watch<ConfigProvider>();
+    final notifProvider = context.watch<NotificationProvider>();
+    final settings = notifProvider.settings;
 
     return Scaffold(
       backgroundColor: AppColors.softSurface,
@@ -41,20 +47,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _SettingItem(
               title: 'Push Notifications',
               icon: Icons.notifications_active,
-              value: _notifications,
-              onToggle: (v) => setState(() => _notifications = v),
+              value: settings.orderUpdates,
+              onToggle: (v) => notifProvider.updateSettings(orderUpdates: v),
             ),
             _SettingItem(
               title: 'Email Newsletter',
               icon: Icons.mail,
-              value: _newsletter,
-              onToggle: (v) => setState(() => _newsletter = v),
+              value: settings.promotions,
+              onToggle: (v) => notifProvider.updateSettings(promotions: v),
             ),
             _SettingItem(
               title: 'Dark Mode (${config.theme})',
               icon: Icons.dark_mode,
               value: config.theme == 'dark',
-              onToggle: (_) => config.toggleTheme(),
+              onToggle: (_) => _handleThemeToggle(config),
             ),
             _SettingItem(
               title: 'Currency (${config.currency})',
@@ -79,7 +85,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context: context,
                 builder: (_) => const AlertDialog(
                   title: Text('Privacy Policy'),
-                  content: Text('Data is secure.'),
+                  content: SingleChildScrollView(
+                    child: Text(
+                      'Your privacy matters to us.\n\n'
+                      'We collect only the information needed to process your orders, '
+                      'including your name, phone number, delivery address, and order history. '
+                      'This data is used solely to fulfil orders, provide customer support, '
+                      'and improve our service.\n\n'
+                      'We do not sell your personal information to third parties. '
+                      'Payment details are processed securely by our payment providers.\n\n'
+                      'You may request access to, correction of, or deletion of your personal '
+                      'data at any time by contacting our support team.',
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -88,15 +106,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
               onTap: () => showDialog(
                 context: context,
                 builder: (_) => const AlertDialog(
-                  title: Text('Terms'),
-                  content: Text('Terms...'),
+                  title: Text('Terms of Service'),
+                  content: SingleChildScrollView(
+                    child: Text(
+                      'By using this app you agree to the following terms:\n\n'
+                      '1. Orders are confirmed once payment is received successfully.\n'
+                      '2. Delivery times are estimates and may vary based on location and availability.\n'
+                      '3. Returns are accepted within 7 days of delivery for unused items in original condition.\n'
+                      '4. We are not liable for misuse of your account or unauthorised access due to shared credentials.\n'
+                      '5. We reserve the right to update these terms at any time.',
+                    ),
+                  ),
                 ),
               ),
             ),
             const SizedBox(height: 32),
             Center(
               child: Text(
-                'Version 1.0.0 (Build 42)',
+                'Version 1.0.0+1',
                 style: TextStyle(
                   color: AppColors.brandMuted.withValues(alpha: 0.6),
                   fontSize: 14,

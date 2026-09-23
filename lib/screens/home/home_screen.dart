@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/models/product.dart';
 import 'package:sell_on_app/providers/cart_provider.dart';
+import 'package:sell_on_app/providers/catalog_provider.dart';
 import 'package:sell_on_app/providers/config_provider.dart';
 import 'package:sell_on_app/widgets/product_card.dart';
 import 'package:sell_on_app/widgets/skeleton.dart';
@@ -23,9 +24,13 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _loading = false);
-    });
+    _loadCatalog();
+  }
+
+  Future<void> _loadCatalog() async {
+    final catalog = context.read<CatalogProvider>();
+    await catalog.load();
+    if (mounted) setState(() => _loading = false);
   }
 
   @override
@@ -39,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Future.delayed(const Duration(milliseconds: 300), () {
       if (_searchQuery == value && mounted) {
         setState(() => _debouncedSearch = value);
+        context.read<CatalogProvider>().search(value);
       }
     });
   }
@@ -47,28 +53,28 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final config = context.watch<ConfigProvider>();
     final cart = context.watch<CartProvider>();
+    final catalog = context.watch<CatalogProvider>();
 
-    final filteredProducts = Product.all
-        .where((p) =>
-            p.name.toLowerCase().contains(_debouncedSearch.toLowerCase()))
-        .toList();
+    final filteredProducts = _debouncedSearch.isNotEmpty
+        ? catalog.products
+            .where((p) =>
+                p.name.toLowerCase().contains(_debouncedSearch.toLowerCase()) ||
+                p.description.toLowerCase().contains(_debouncedSearch.toLowerCase()))
+            .toList()
+        : catalog.products;
     final displayProducts =
         filteredProducts.isNotEmpty ? filteredProducts : <Product>[];
 
-    final categories = [
-      {'id': '1', 'name': 'Handbags', 'slug': 'Handbags', 'disabled': false},
-      {'id': '2', 'name': 'Travel', 'slug': 'Travel', 'disabled': false},
-      {'id': '3', 'name': 'Shoes', 'slug': 'Shoes', 'disabled': true},
-      {'id': '4', 'name': 'Jewelry', 'slug': 'Jewelry', 'disabled': true},
-    ];
+    final categories = catalog.categories;
 
     return Scaffold(
       backgroundColor: AppColors.softSurface,
       body: SafeArea(
         child: RefreshIndicator(
           onRefresh: () async {
-            setState(() => _loading = true);
-            await Future.delayed(const Duration(seconds: 1));
+            await _loadCatalog();
+            if (mounted) setState(() => _loading = true);
+            await Future.delayed(const Duration(milliseconds: 400));
             if (mounted) setState(() => _loading = false);
           },
           child: SingleChildScrollView(
@@ -231,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
               else if (displayProducts.isEmpty)
                 _buildEmptySearchState()
               else ...[
-                _buildBannerCarousel(config),
+                _buildBannerCarousel(config, catalog.banners),
                 _buildFeaturedSection(displayProducts, cart, config),
                 _buildCategoriesSection(categories),
               ],
@@ -286,15 +292,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildBannerCarousel(ConfigProvider config) {
+  Widget _buildBannerCarousel(ConfigProvider config, List<Map<String, dynamic>> banners) {
     return SizedBox(
       height: 240,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 32),
-        itemCount: config.homeBanners.length > 0 ? config.homeBanners.length : 1,
+        itemCount: banners.isNotEmpty ? banners.length : 1,
         itemBuilder: (context, index) {
-          if (config.homeBanners.isEmpty) {
+          if (banners.isEmpty) {
             return Container(
               width: MediaQuery.of(context).size.width - 64,
               margin: const EdgeInsets.only(right: 20),
@@ -338,7 +344,7 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
 
-          final banner = config.homeBanners[index];
+          final banner = banners[index];
           return GestureDetector(
             onTap: () => Navigator.of(context)
                 .pushNamed(banner['link'] as String? ?? '/product/1'),
@@ -555,66 +561,54 @@ class _HomeScreenState extends State<HomeScreen> {
               itemCount: categories.length,
               itemBuilder: (context, index) {
                 final cat = categories[index];
-                final disabled = cat['disabled'] as bool? ?? false;
+                final name = cat['name'] as String? ?? '';
                 return GestureDetector(
-                  onTap: disabled
-                      ? null
-                      : () =>
-                          Navigator.of(context).pushNamed('/explore'),
-                  child: Opacity(
-                    opacity: disabled ? 0.3 : 1.0,
-                    child: Container(
-                      margin: const EdgeInsets.only(right: 32),
-                      child: Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(32),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.6),
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.06),
-                                  blurRadius: 12,
-                                  offset: const Offset(0, 4),
-                                ),
-                              ],
+                  onTap: () {
+                    context.read<CatalogProvider>().filterByCategory(name);
+                    Navigator.of(context).pushNamed('/explore');
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(right: 32),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(32),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.6),
                             ),
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(22),
-                              child: Image.asset(
-                                'assets/branding/category_${cat['slug']?.toString().toLowerCase() ?? 'handbag'}.png',
-                                width: 96,
-                                height: 96,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(
-                                  width: 96,
-                                  height: 96,
-                                  color: AppColors.softSurface,
-                                  child: const Icon(
-                                    Icons.category,
-                                    color: AppColors.brandMuted,
-                                  ),
-                                ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.06),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: SizedBox(
+                            width: 96,
+                            height: 96,
+                            child: Center(
+                              child: Text(
+                                cat['icon'] as String? ?? '🛍️',
+                                style: const TextStyle(fontSize: 40),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            cat['name'] as String? ?? '',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.brandDark,
-                              fontSize: 10,
-                              letterSpacing: 2,
-                            ),
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.brandDark,
+                            fontSize: 10,
+                            letterSpacing: 2,
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ),
                 );

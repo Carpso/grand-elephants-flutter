@@ -1,117 +1,180 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/models/cart_item.dart';
+import 'package:sell_on_app/providers/admin_provider.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
 
-class SalesScreen extends StatelessWidget {
+class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
 
-  static const List<_Transaction> _transactions = [
-    _Transaction(id: '1', item: 'Royal Elephant Tote', amount: 'K 1,200', date: 'Today, 10:23 AM'),
-    _Transaction(id: '2', item: 'Travel Duffle', amount: 'K 2,500', date: 'Yesterday, 4:15 PM'),
-    _Transaction(id: '3', item: 'Leather Belt', amount: 'K 450', date: 'Yesterday, 2:30 PM'),
-    _Transaction(id: '4', item: 'Canvas Messenger', amount: 'K 850', date: 'Yesterday, 11:15 AM'),
-  ];
+  @override
+  State<SalesScreen> createState() => _SalesScreenState();
+}
+
+class _SalesScreenState extends State<SalesScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AdminProvider>().loadOrders();
+    });
+  }
+
+  String _formatCents(int cents) {
+    final amount = cents / 100;
+    final parts = amount.toStringAsFixed(2).split('.');
+    final buf = StringBuffer();
+    for (var i = 0; i < parts[0].length; i++) {
+      if (i > 0 && (parts[0].length - i) % 3 == 0) buf.write(',');
+      buf.write(parts[0][i]);
+    }
+    return 'K ${buf.toString()}.${parts[1]}';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final admin = context.watch<AdminProvider>();
+    final orders = admin.orders;
+
+    final successful = orders.where((o) => o.status != 'Cancelled' && o.status != 'Refunded').toList();
+    final totalCents = successful.fold<int>(0, (sum, o) => sum + o.totalCents);
+
     return Scaffold(
       appBar: AppBar(title: const Text('Sales Report')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(colors: [Color(0xFF1F2937), Color(0xFF111827)]),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8)),
-                ],
-              ),
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'TOTAL REVENUE (DEC)',
-                    style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w500, fontSize: 10, letterSpacing: 1),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'K 45,250.00',
-                    style: TextStyle(color: AppColors.white, fontSize: 32, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-                        ),
-                        child: const Text(
-                          '\u25B2 12.5%',
-                          style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      const Text(
-                        'vs last month',
-                        style: TextStyle(color: AppColors.white, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Recent Transactions',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.brandDark),
-            ),
-            const SizedBox(height: 16),
-            ..._transactions.map((t) => Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: SoftCard(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: RefreshIndicator(
+        onRefresh: () => admin.loadOrders(),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(colors: [Color(0xFF1F2937), Color(0xFF111827)]),
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 20, offset: const Offset(0, 8)),
+                  ],
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'TOTAL REVENUE (SUCCESSFUL ORDERS)',
+                      style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w500, fontSize: 10, letterSpacing: 1),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _formatCents(totalCents),
+                      style: const TextStyle(color: AppColors.white, fontSize: 32, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(t.item, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark)),
-                              const SizedBox(height: 4),
-                              Text(t.date, style: const TextStyle(color: AppColors.brandMuted, fontSize: 12, fontWeight: FontWeight.w500)),
-                            ],
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                          ),
+                          child: Text(
+                            '${successful.length}',
+                            style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12),
                           ),
                         ),
-                        Text(t.amount, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandPrimary)),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'successful orders',
+                          style: TextStyle(color: AppColors.white, fontSize: 12),
+                        ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Recent Orders',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+              ),
+              const SizedBox(height: 16),
+              if (orders.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 32),
+                  child: Center(
+                    child: Text('No orders yet.', style: TextStyle(color: AppColors.brandMuted)),
                   ),
-                )),
-          ],
+                )
+              else
+                ...orders.map((o) => Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: SoftCard(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '#${o.id}${o.businessName != null ? ' • ${o.businessName}' : ''}',
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _itemSummary(o),
+                                    style: const TextStyle(color: AppColors.brandMuted, fontSize: 12, fontWeight: FontWeight.w500),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    o.date,
+                                    style: const TextStyle(color: AppColors.brandMuted, fontSize: 12, fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  _formatCents(o.totalCents),
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandPrimary),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  o.status.toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: o.status == 'Cancelled' || o.status == 'Refunded'
+                                        ? AppColors.error
+                                        : o.status == 'Delivered'
+                                            ? AppColors.success
+                                            : AppColors.brandMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    )),
+            ],
+          ),
         ),
       ),
     );
   }
-}
 
-class _Transaction {
-  final String id;
-  final String item;
-  final String amount;
-  final String date;
-
-  const _Transaction({
-    required this.id,
-    required this.item,
-    required this.amount,
-    required this.date,
-  });
+  String _itemSummary(Order order) {
+    if (order.items.isEmpty) return order.deliveryMethod;
+    return order.items.map((CartItem i) => '${i.name} x${i.quantity}').join(', ');
+  }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
 class HelpScreen extends StatefulWidget {
   const HelpScreen({super.key});
@@ -117,11 +119,20 @@ class _HelpScreenState extends State<HelpScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'support@grandelephants.com',
-                    style: TextStyle(
-                      color: AppColors.brandMuted.withValues(alpha: 0.7),
-                      fontSize: 14,
+                  GestureDetector(
+                    onTap: () {
+                      Clipboard.setData(const ClipboardData(text: 'support@grandelephants.com'));
+                      ToastProvider.of(context).show('Support email copied', ToastType.success);
+                    },
+                    child: Text(
+                      'support@grandelephants.com',
+                      style: TextStyle(
+                        color: AppColors.brandPrimary.withValues(alpha: 0.9),
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        decoration: TextDecoration.underline,
+                        decorationColor: AppColors.brandPrimary.withValues(alpha: 0.5),
+                      ),
                     ),
                   ),
                 ],

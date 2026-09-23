@@ -1,15 +1,77 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/models/cart_item.dart';
 import 'package:sell_on_app/providers/auth_provider.dart';
+import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:sell_on_app/services/api_client.dart';
 import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:sell_on_app/widgets/toast.dart';
 
-class EmployeeDashboardScreen extends StatelessWidget {
+class EmployeeDashboardScreen extends StatefulWidget {
   const EmployeeDashboardScreen({super.key});
+
+  @override
+  State<EmployeeDashboardScreen> createState() => _EmployeeDashboardScreenState();
+}
+
+class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
+  DateTime? _clockIn;
+  bool _loading = true;
+  int _orderCount = 0;
+  double _total = 0;
+  bool _isAdmin = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _clockIn = DateTime.now();
+    _loadStats();
+  }
+
+  Future<void> _loadStats() async {
+    final auth = context.read<AuthProvider>();
+    _isAdmin = auth.role == 'admin' || auth.user?.role == 'admin';
+    try {
+      if (_isAdmin) {
+        final res = await ApiClient.instance.get('/api/admin/stats');
+        final data = res as Map<String, dynamic>;
+        _orderCount = (data['orders'] as num?)?.toInt() ?? 0;
+        _total = ((data['gmvCents'] as num?)?.toInt() ?? 0) / 100;
+      } else {
+        final res = await ApiClient.instance.get('/api/orders');
+        final orders = (res as List)
+            .map((e) => Order.fromJson(e as Map<String, dynamic>))
+            .toList();
+        _orderCount = orders.length;
+        _total = orders.fold(0.0, (sum, o) => sum + o.total);
+      }
+    } catch (e) {
+      debugPrint('Employee stats load failed: $e');
+    }
+    if (mounted) setState(() => _loading = false);
+  }
+
+  String _formatTime(DateTime dt) {
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final minute = dt.minute.toString().padLeft(2, '0');
+    final suffix = dt.hour >= 12 ? 'PM' : 'AM';
+    return '$h:$minute $suffix';
+  }
+
+  void _handleNewSale(AuthProvider auth) {
+    if (_isAdmin) {
+      Navigator.of(context).pushNamed('/admin/sales');
+    } else {
+      ToastProvider.of(context)
+          .show('POS available for admins', ToastType.info);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
+    final config = context.watch<ConfigProvider>();
 
     return Scaffold(
       body: Column(
@@ -19,7 +81,7 @@ class EmployeeDashboardScreen extends StatelessWidget {
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                _buildSearchSection(),
+                _buildSearchSection(auth),
                 const SizedBox(height: 24),
                 const Text(
                   'My Shift',
@@ -44,9 +106,9 @@ class EmployeeDashboardScreen extends StatelessWidget {
                               style: TextStyle(color: AppColors.brandMuted),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
-                              '08:00 AM',
-                              style: TextStyle(
+                            Text(
+                              _clockIn != null ? _formatTime(_clockIn!) : '--:--',
+                              style: const TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 20,
                                 color: Colors.green,
@@ -69,19 +131,51 @@ class EmployeeDashboardScreen extends StatelessWidget {
                               style: TextStyle(color: AppColors.brandMuted),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
-                              '12',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 20,
-                                color: Colors.orange,
-                              ),
-                            ),
+                            _loading
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: AppColors.brandPrimary,
+                                    ),
+                                  )
+                                : Text(
+                                    '$_orderCount',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 20,
+                                      color: Colors.orange,
+                                    ),
+                                  ),
                           ],
                         ),
                       ),
                     ),
                   ],
+                ),
+                const SizedBox(height: 16),
+                SoftCard(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Total Sales',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brandDark,
+                        ),
+                      ),
+                      Text(
+                        _loading ? '...' : config.formatPrice(_total),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.brandPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 32),
                 const Text(
@@ -158,7 +252,7 @@ class EmployeeDashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSearchSection() {
+  Widget _buildSearchSection(AuthProvider auth) {
     return SoftCard(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -193,7 +287,7 @@ class EmployeeDashboardScreen extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: () => _handleNewSale(auth),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandPrimary,
                 foregroundColor: AppColors.brandDark,
@@ -215,9 +309,16 @@ class EmployeeDashboardScreen extends StatelessWidget {
 
   Widget _buildQuickTasks() {
     final tasks = [
-      {'title': 'Check Inventory', 'icon': Icons.inventory},
-      {'title': 'Customer Returns', 'icon': Icons.assignment_return},
-      {'title': 'End of Day Report', 'icon': Icons.summarize},
+      {
+        'title': 'View Orders',
+        'icon': Icons.receipt_long,
+        'route': '/orders',
+      },
+      {
+        'title': 'View Wishlist',
+        'icon': Icons.favorite_border,
+        'route': '/profile/wishlist',
+      },
     ];
 
     return Container(
@@ -235,7 +336,7 @@ class EmployeeDashboardScreen extends StatelessWidget {
       child: Column(
         children: tasks.map((task) {
           return InkWell(
-            onTap: () {},
+            onTap: () => Navigator.of(context).pushNamed(task['route'] as String),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               child: Row(

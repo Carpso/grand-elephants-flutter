@@ -1,6 +1,6 @@
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:sell_on_app/services/api_client.dart';
 
 class SystemHealthModal extends StatefulWidget {
   final bool visible;
@@ -28,11 +28,11 @@ class _SystemHealthModalState extends State<SystemHealthModal> {
   void didUpdateWidget(covariant SystemHealthModal oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.visible && !oldWidget.visible) {
-      _resetAndSimulate();
+      _runHealthCheck();
     }
   }
 
-  void _resetAndSimulate() {
+  void _runHealthCheck() {
     setState(() {
       _statuses['db'] = 'checking';
       _statuses['api'] = 'checking';
@@ -40,20 +40,45 @@ class _SystemHealthModalState extends State<SystemHealthModal> {
       _latency = 0;
     });
 
-    Future.delayed(const Duration(milliseconds: 800), () {
-      if (mounted) setState(() => _statuses['db'] = 'online');
-    });
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) setState(() => _statuses['api'] = 'online');
-    });
-    Future.delayed(const Duration(milliseconds: 2200), () {
-      if (mounted) {
-        setState(() {
-          _statuses['cache'] = 'online';
-          _latency = Random().nextInt(50) + 10;
-        });
+    final stopwatch = Stopwatch()..start();
+    ApiClient.instance.get('/api/health', withAuth: false).then((res) {
+      stopwatch.stop();
+      if (!mounted) return;
+      var db = 'online';
+      var api = 'online';
+      var cache = 'online';
+      if (res is Map<String, dynamic>) {
+        db = _deriveStatus(res['db'], db);
+        cache = _deriveStatus(res['cache'], cache);
       }
+      setState(() {
+        _statuses['db'] = db;
+        _statuses['api'] = api;
+        _statuses['cache'] = cache;
+        _latency = stopwatch.elapsedMilliseconds;
+      });
+    }).catchError((_) {
+      stopwatch.stop();
+      if (!mounted) return;
+      setState(() {
+        _statuses['db'] = 'offline';
+        _statuses['api'] = 'offline';
+        _statuses['cache'] = 'offline';
+        _latency = stopwatch.elapsedMilliseconds;
+      });
     });
+  }
+
+  String _deriveStatus(dynamic value, String fallback) {
+    if (value is bool) return value ? 'online' : 'offline';
+    if (value is String) {
+      final v = value.toLowerCase();
+      if (v == 'ok' || v == 'online' || v == 'healthy' || v == 'up') {
+        return 'online';
+      }
+      return 'offline';
+    }
+    return fallback;
   }
 
   @override
@@ -157,31 +182,29 @@ class _SystemHealthModalState extends State<SystemHealthModal> {
           _StatusRow(label: 'API Gateway (REST)', status: _statuses['api']!),
           const SizedBox(height: 12),
           _StatusRow(label: 'Redis Cache Cluster', status: _statuses['cache']!),
-          if (_latency > 0) ...[
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.speed, size: 20, color: Color(0xFF4B5563)),
-                const SizedBox(width: 8),
-                Text.rich(
-                  TextSpan(
-                    text: 'Global Latency: ',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF6B7280),
-                    ),
-                    children: [
-                      TextSpan(
-                        text: '${_latency}ms',
-                        style: const TextStyle(color: AppColors.brandPrimary),
-                      ),
-                    ],
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.speed, size: 20, color: Color(0xFF4B5563)),
+              const SizedBox(width: 8),
+              Text.rich(
+                TextSpan(
+                  text: 'Global Latency: ',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF6B7280),
                   ),
+                  children: [
+                    TextSpan(
+                      text: _latency > 0 ? '${_latency}ms' : '--',
+                      style: const TextStyle(color: AppColors.brandPrimary),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -197,6 +220,7 @@ class _StatusRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isChecking = status == 'checking';
+    final isOnline = status == 'online';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -215,7 +239,11 @@ class _StatusRow extends StatelessWidget {
                 height: 12,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: isChecking ? AppColors.warning : AppColors.success,
+                  color: isChecking
+                      ? AppColors.warning
+                      : isOnline
+                          ? AppColors.success
+                          : AppColors.error,
                 ),
               ),
               const SizedBox(width: 12),
@@ -238,14 +266,20 @@ class _StatusRow extends StatelessWidget {
               ),
             )
           else
-            const Row(
+            Row(
               children: [
-                Icon(Icons.check_circle, size: 20, color: AppColors.success),
-                SizedBox(width: 4),
+                Icon(
+                  isOnline ? Icons.check_circle : Icons.cancel,
+                  size: 20,
+                  color: isOnline ? AppColors.success : AppColors.error,
+                ),
+                const SizedBox(width: 4),
                 Text(
-                  'Operational',
+                  isOnline ? 'Operational' : 'Offline',
                   style: TextStyle(
-                    color: Color(0xFF15803D),
+                    color: isOnline
+                        ? const Color(0xFF15803D)
+                        : AppColors.error,
                     fontWeight: FontWeight.bold,
                     fontSize: 12,
                     letterSpacing: 0.5,
