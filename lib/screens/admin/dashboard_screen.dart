@@ -10,6 +10,7 @@ class DashboardScreen extends StatelessWidget {
 
   static const List<_MenuItem> _menuItems = [
     _MenuItem('Inventory', Icons.inventory, Color(0xFF3B82F6), '/admin/inventory'),
+    _MenuItem('Businesses', Icons.storefront, Color(0xFFF97316), '/admin/businesses'),
     _MenuItem('Sales', Icons.attach_money, Color(0xFF10B981), '/admin/sales'),
     _MenuItem('Finance', Icons.account_balance, Color(0xFFF59E0B), '/admin/finance'),
     _MenuItem('Users', Icons.group, Color(0xFFEC4899), '/admin/users'),
@@ -115,6 +116,7 @@ class DashboardScreen extends StatelessWidget {
                 const SizedBox(height: 16),
                 SoftCard(
                   padding: const EdgeInsets.all(16),
+                  onTap: () => Navigator.of(context).pushNamed('/admin/businesses'),
                   child: Row(
                     children: [
                       Container(

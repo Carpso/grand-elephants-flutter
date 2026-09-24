@@ -5,6 +5,8 @@ import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/models/cart_item.dart';
 import 'package:grand_elephants/models/product.dart';
 import 'package:grand_elephants/providers/cart_provider.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/services/receipt_service.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
@@ -20,6 +22,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   Order? _order;
   bool _loading = true;
   bool _cancelling = false;
+  bool _printing = false;
 
   @override
   void initState() {
@@ -50,6 +53,37 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       if (!mounted) return;
       ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
       setState(() => _cancelling = false);
+    }
+  }
+
+  /// Prints/saves the branded receipt PDF for this order. Uses the server
+  /// receipt when reachable, falling back to the local order data.
+  Future<void> _printReceipt() async {
+    final order = _order;
+    if (order == null || _printing) return;
+    final vatPct = context.read<ConfigProvider>().taxRate;
+    setState(() => _printing = true);
+    try {
+      OrderReceipt? receipt;
+      try {
+        receipt = await ReceiptService.fetch(order.id);
+      } catch (e) {
+        debugPrint('Receipt fetch failed: $e');
+      }
+      receipt ??= OrderReceipt.fromOrder(
+        order,
+        businessName: order.businessName ?? '',
+        vatPct: vatPct,
+      );
+      await ReceiptService.print(receipt);
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context).show(
+        'Could not open the print dialog. Please try again.',
+        ToastType.error,
+      );
+    } finally {
+      if (mounted) setState(() => _printing = false);
     }
   }
 
@@ -103,6 +137,25 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       variant: SoftButtonVariant.outline,
                       onPressed: _cancelling ? null : _cancelOrder,
                     ),
+                  if (order != null &&
+                      !order.isDelivered &&
+                      !order.isCancelled &&
+                      order.status != 'Refunded') ...[
+                    const SizedBox(height: 12),
+                    SoftButton(
+                      title: 'Track delivery',
+                      variant: SoftButtonVariant.outline,
+                      icon: const Icon(
+                        Icons.local_shipping_outlined,
+                        size: 20,
+                        color: AppColors.brandPrimary,
+                      ),
+                      onPressed: () => Navigator.of(context).pushNamed(
+                        '/orders/track',
+                        arguments: orderId,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   SoftButton(
                     title: 'Buy Again',
@@ -129,6 +182,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     },
                   ),
                   const SizedBox(height: 12),
+                  const SizedBox(height: 12),
+                  SoftButton(
+                    title: _printing ? 'Preparing Receipt...' : 'Print / Save Receipt',
+                    variant: SoftButtonVariant.secondary,
+                    isLoading: _printing,
+                    icon: const Icon(
+                      Icons.print,
+                      size: 20,
+                      color: AppColors.brandPrimary,
+                    ),
+                    onPressed: order == null || _printing ? null : _printReceipt,
+                  ),
                   if (order?.invoiceNo != null)
                     SoftButton(
                       title: 'Invoice ${order!.invoiceNo}',

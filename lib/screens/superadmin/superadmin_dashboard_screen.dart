@@ -4,8 +4,10 @@ import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/providers/admin_provider.dart';
 import 'package:grand_elephants/providers/auth_provider.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/services/api_client.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
 import 'package:grand_elephants/widgets/system_health_modal.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 
 class SuperadminDashboardScreen extends StatefulWidget {
   const SuperadminDashboardScreen({super.key});
@@ -17,13 +19,28 @@ class SuperadminDashboardScreen extends StatefulWidget {
 
 class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
   bool _healthVisible = false;
+  bool _maintenance = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminProvider>().loadStats();
+      _loadMaintenanceFlag();
     });
+  }
+
+  Future<void> _loadMaintenanceFlag() async {
+    try {
+      final res = await ApiClient.instance.get('/api/admin/settings');
+      final data = Map<String, dynamic>.from(res as Map);
+      if (!mounted) return;
+      setState(() => _maintenance = '${data['maintenance_mode'] ?? '0'}' == '1');
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context)
+          .show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+    }
   }
 
   String _formatCents(int cents) {
@@ -144,19 +161,19 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
                     color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: config.maintenanceMode
+                      color: _maintenance
                           ? Colors.red.shade200
                           : Colors.green.shade200,
                     ),
                   ),
                   child: Text(
-                    config.maintenanceMode
+                    _maintenance
                         ? 'MAINTENANCE MODE'
                         : 'SYSTEM ONLINE',
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
-                      color: config.maintenanceMode
+                      color: _maintenance
                           ? Colors.red.shade100
                           : Colors.green.shade100,
                     ),
@@ -367,7 +384,7 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
                       color: AppColors.brandPrimary,
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(height: 12),
                   Text(
                     item['title'] as String,
                     style: const TextStyle(

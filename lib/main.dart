@@ -37,9 +37,14 @@ import 'screens/scan/scan_screen.dart';
 import 'screens/tryon/try_on_screen.dart';
 import 'screens/support/chat_screen.dart';
 import 'screens/rider/apply_screen.dart';
+import 'screens/business/business_apply_screen.dart';
 import 'screens/business/business_home_screen.dart';
 import 'screens/business/business_dashboard_screen.dart';
+import 'screens/business/tax_screen.dart';
+import 'screens/employee/employee_stock_screen.dart';
 import 'screens/admin/admin_home_screen.dart';
+import 'screens/admin/add_product_screen.dart';
+import 'screens/admin/businesses_screen.dart';
 import 'screens/admin/dashboard_screen.dart' as admin_dash;
 import 'screens/admin/users_screen.dart';
 import 'screens/admin/riders_screen.dart';
@@ -53,7 +58,16 @@ import 'screens/admin/marketing_screen.dart';
 import 'screens/admin/admin_notifications_screen.dart';
 import 'screens/admin/admin_settings_screen.dart' as admin_settings;
 import 'screens/superadmin/collection_numbers_screen.dart';
+import 'screens/superadmin/superadmin_dashboard_screen.dart';
 import 'widgets/toast.dart';
+
+/// Global navigator used for programmatic navigation (e.g. forced logout)
+/// that must not depend on a widget context.
+final navigatorKey = GlobalKey<NavigatorState>();
+
+/// Name of the most recently generated route; lets providers that have no
+/// BuildContext (like [AuthProvider]) avoid navigating when pointless.
+String currentRouteName = '/splash';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -76,7 +90,7 @@ class SellOnApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => AuthProvider(), lazy: false),
         ChangeNotifierProvider(create: (_) => ConfigProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => CatalogProvider()),
@@ -92,13 +106,19 @@ class SellOnApp extends StatelessWidget {
       ],
       child: MaterialApp(
         title: 'Grand Elephants',
+        navigatorKey: navigatorKey,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.system,
         initialRoute: '/splash',
         onGenerateRoute: (settings) {
+          if (settings.name != null && settings.name!.isNotEmpty) {
+            currentRouteName = settings.name!;
+          }
+
           final routes = <String, WidgetBuilder>{
+            '/': (_) => const HomeShell(),
             '/splash': (_) => const SplashScreen(),
             '/onboarding': (_) => const OnboardingScreen(),
             '/login': (_) => const LoginScreen(),
@@ -121,9 +141,15 @@ class SellOnApp extends StatelessWidget {
             '/support': (_) => const ChatScreen(),
             '/support/chat': (_) => const ChatScreen(),
             '/rider/apply': (_) => const ApplyScreen(),
+            '/business/apply': (_) => const BusinessApplyScreen(),
             '/business/dashboard': (_) => const BusinessDashboardScreen(),
             '/business/home': (_) => const BusinessHomeScreen(),
+            '/business/tax': (_) => const TaxScreen(),
+            '/business/collection-numbers': (_) => const CollectionNumbersScreen(),
+            '/business/products/add': (_) => const AddProductScreen(),
+            '/employee/stock': (_) => const EmployeeStockScreen(),
             '/admin': (_) => const AdminHomeScreen(),
+            '/admin/businesses': (_) => const BusinessesScreen(),
             '/admin/dashboard': (_) => const admin_dash.DashboardScreen(),
             '/admin/users': (_) => const UsersScreen(),
             '/admin/riders': (_) => const RidersScreen(),
@@ -136,12 +162,14 @@ class SellOnApp extends StatelessWidget {
             '/admin/marketing': (_) => const MarketingScreen(),
             '/admin/notifications': (_) => const AdminNotificationsScreen(),
             '/admin/settings': (_) => const admin_settings.AdminSettingsScreen(),
+            '/superadmin/dashboard': (_) => const SuperadminDashboardScreen(),
             '/superadmin/collection-numbers': (_) => const CollectionNumbersScreen(),
             '/admin/collection-numbers': (_) => const admin_collections.AdminCollectionNumbersScreen(),
           };
 
           final adminOnlyRoutes = {
             '/admin',
+            '/admin/businesses',
             '/admin/dashboard',
             '/admin/users',
             '/admin/riders',
@@ -156,6 +184,7 @@ class SellOnApp extends StatelessWidget {
             '/admin/settings',
             '/admin/collection-numbers',
             '/superadmin/collection-numbers',
+            '/superadmin/dashboard',
           };
 
           if (adminOnlyRoutes.contains(settings.name)) {
@@ -163,6 +192,28 @@ class SellOnApp extends StatelessWidget {
             final role = auth.role;
             if (role != 'admin' && role != 'superadmin') {
               ToastProvider.of(context).show('You need admin access for that page', ToastType.error);
+              return MaterialPageRoute(
+                builder: (_) => const HomeShell(),
+                settings: settings,
+              );
+            }
+          }
+
+          // Team-facing screens: staff and shop owners only (enforced for real
+          // by the API, this just keeps the shell honest).
+          final teamRoutes = {
+            '/business/dashboard',
+            '/business/home',
+            '/business/tax',
+            '/business/collection-numbers',
+            '/business/products/add',
+            '/employee/stock',
+          };
+          if (teamRoutes.contains(settings.name)) {
+            final auth = Provider.of<AuthProvider>(context, listen: false);
+            const allowed = {'business', 'employee', 'admin', 'superadmin'};
+            if (!allowed.contains(auth.role)) {
+              ToastProvider.of(context).show('That page is for shop teams', ToastType.error);
               return MaterialPageRoute(
                 builder: (_) => const HomeShell(),
                 settings: settings,

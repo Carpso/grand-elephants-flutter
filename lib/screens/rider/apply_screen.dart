@@ -1,9 +1,10 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/providers/auth_provider.dart';
+import 'package:grand_elephants/services/image_util.dart';
+import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
 import 'package:grand_elephants/widgets/soft_input.dart';
@@ -34,12 +35,23 @@ class _ApplyScreenState extends State<ApplyScreen> {
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery);
+    final file = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 900,
+      imageQuality: 70,
+    );
     if (file == null) return;
-    setState(() => _bikePhoto = file.path);
+    final dataUri = await imageToDataUri(file, maxDimension: 900, quality: 70);
+    if (dataUri == null) {
+      if (!mounted) return;
+      ToastProvider.of(context)
+          .show('Could not read that image, pick another one', ToastType.error);
+      return;
+    }
+    setState(() => _bikePhoto = dataUri);
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     if (_vehicleTypeCtrl.text.isEmpty ||
         _plateNumberCtrl.text.isEmpty ||
         _licenseNumberCtrl.text.isEmpty ||
@@ -47,14 +59,25 @@ class _ApplyScreenState extends State<ApplyScreen> {
       ToastProvider.of(context).show('Please fill in ALL details including Plate Number and Bike Photo', ToastType.error);
       return;
     }
-    context.read<AuthProvider>().requestRiderAccess({
-      'vehicleType': _vehicleTypeCtrl.text,
-      'plateNumber': _plateNumberCtrl.text,
-      'licenseNumber': _licenseNumberCtrl.text,
-      'phone': _phoneCtrl.text,
-      'bikePhoto': _bikePhoto,
-    });
-    Navigator.of(context).maybePop();
+    try {
+      await context.read<AuthProvider>().requestRiderAccess({
+        'vehicleType': _vehicleTypeCtrl.text,
+        'plateNumber': _plateNumberCtrl.text,
+        'licenseNumber': _licenseNumberCtrl.text,
+        'phone': _phoneCtrl.text,
+        'bikePhoto': _bikePhoto,
+      });
+      if (!mounted) return;
+      ToastProvider.of(context)
+          .show('Rider application submitted', ToastType.success);
+      Navigator.of(context).maybePop();
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context).show(
+        '$e'.replaceFirst('Exception: ', '').replaceFirst('ApiException: ', ''),
+        ToastType.error,
+      );
+    }
   }
 
   @override
@@ -238,19 +261,12 @@ class _ApplyScreenState extends State<ApplyScreen> {
               child: _bikePhoto != null
                   ? ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: _bikePhoto!.startsWith('http')
-                          ? Image.network(
-                              _bikePhoto!,
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              height: double.infinity,
-                            )
-                          : Image.file(
-                              File(_bikePhoto!),
-                              fit: BoxFit.cover,
-                              width: double.infinity,
-                              height: double.infinity,
-                            ),
+                      child: ProductImage(
+                        src: _bikePhoto!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        height: double.infinity,
+                      ),
                     )
                   : Column(
                       mainAxisAlignment: MainAxisAlignment.center,

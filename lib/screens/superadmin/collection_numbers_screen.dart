@@ -2,11 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/models/business_collection_number.dart';
+import 'package:grand_elephants/providers/auth_provider.dart';
 import 'package:grand_elephants/providers/collection_number_provider.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
 import 'package:grand_elephants/widgets/soft_input.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 
+/// Collection numbers for the signed-in scope: staff/superadmin see every
+/// field (including the business name/id they are editing for), a plain
+/// business only sees its own mobile money details.
 class CollectionNumbersScreen extends StatefulWidget {
   const CollectionNumbersScreen({super.key});
 
@@ -17,11 +21,37 @@ class CollectionNumbersScreen extends StatefulWidget {
 
 class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CollectionNumberProvider>().load();
+    });
+  }
+
+  bool get _managesBusinessFields =>
+      context.read<AuthProvider>().role != 'business';
+
+  Future<void> _guard(Future<bool> action) async {
+    final ok = await action;
+    if (!mounted || ok) return;
+    final provider = context.read<CollectionNumberProvider>();
+    ToastProvider.of(context).show(
+      provider.error ?? 'Could not save collection number',
+      ToastType.error,
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Collection Numbers'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => context.read<CollectionNumberProvider>().load(),
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => _showAddDialog(context),
@@ -30,47 +60,68 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
       ),
       body: Consumer<CollectionNumberProvider>(
         builder: (context, provider, _) {
-          if (provider.isLoading) {
+          if (provider.isLoading && provider.numbers.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
 
           if (provider.numbers.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+            final message = provider.error ??
+                'No collection numbers configured';
+            return RefreshIndicator(
+              onRefresh: () => provider.load(),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
                 children: [
+                  const SizedBox(height: 120),
                   const Icon(Icons.phone_android,
                       size: 64, color: AppColors.brandMuted),
                   const SizedBox(height: 16),
-                  const Text(
-                    'No collection numbers configured',
-                    style:
-                        TextStyle(fontSize: 18, color: AppColors.brandMuted),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Add a mobile money collection number\nto start accepting payments',
+                  Text(
+                    message,
                     textAlign: TextAlign.center,
                     style:
-                        TextStyle(fontSize: 13, color: AppColors.brandMuted),
+                        const TextStyle(fontSize: 18, color: AppColors.brandMuted),
                   ),
-                  const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: () => _showAddDialog(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Collection Number'),
-                  ),
+                  if (provider.error != null) ...[
+                    const SizedBox(height: 16),
+                    Center(
+                      child: TextButton(
+                        onPressed: () => provider.load(),
+                        child: const Text('Retry',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Add a mobile money collection number\nto start accepting payments',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 13, color: AppColors.brandMuted),
+                    ),
+                    const SizedBox(height: 24),
+                    Center(
+                      child: ElevatedButton.icon(
+                        onPressed: () => _showAddDialog(context),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Collection Number'),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              ...provider.numbers.map((number) =>
-                  _buildNumberCard(context, provider, number)),
-            ],
+          return RefreshIndicator(
+            onRefresh: () => provider.load(),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              children: [
+                ...provider.numbers.map((number) =>
+                    _buildNumberCard(context, provider, number)),
+              ],
+            ),
           );
         },
       ),
@@ -109,7 +160,9 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      number.businessName,
+                      number.businessName.isEmpty
+                          ? number.phoneNumber
+                          : number.businessName,
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
@@ -149,7 +202,7 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
           Row(
             children: [
               GestureDetector(
-                onTap: () => provider.toggleActive(number.id),
+                onTap: () => _guard(provider.toggleActive(number.id)),
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -172,7 +225,7 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
               if (!number.isDefault) ...[
                 const SizedBox(width: 8),
                 GestureDetector(
-                  onTap: () => provider.setDefault(number.id),
+                  onTap: () => _guard(provider.setDefault(number.id)),
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -234,6 +287,7 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
 
   void _showFormDialog(BuildContext context,
       {bool isEdit = false, BusinessCollectionNumber? existing}) {
+    final manageFields = _managesBusinessFields;
     final nameController =
         TextEditingController(text: existing?.businessName ?? '');
     final phoneController =
@@ -277,18 +331,20 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    SoftInput(
-                      label: 'Business Name',
-                      controller: nameController,
-                      hint: 'e.g. Grand Elephants Boutique',
-                    ),
-                    const SizedBox(height: 12),
-                    SoftInput(
-                      label: 'Business ID',
-                      controller: businessIdController,
-                      hint: 'e.g. BE-001',
-                    ),
-                    const SizedBox(height: 12),
+                    if (manageFields) ...[
+                      SoftInput(
+                        label: 'Business Name',
+                        controller: nameController,
+                        hint: 'e.g. Grand Elephants Boutique',
+                      ),
+                      const SizedBox(height: 12),
+                      SoftInput(
+                        label: 'Business ID',
+                        controller: businessIdController,
+                        hint: 'e.g. BE-001',
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     const Text(
                       'Mobile Money Network',
                       style: TextStyle(
@@ -336,9 +392,13 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
                     const SizedBox(height: 24),
                     ElevatedButton(
                       onPressed: () async {
-                        if (nameController.text.isEmpty ||
-                            phoneController.text.isEmpty) {
-                          ToastProvider.of(ctx).show('Business name and phone are required', ToastType.error);
+                        if (phoneController.text.isEmpty ||
+                            (manageFields && nameController.text.isEmpty)) {
+                          ToastProvider.of(ctx).show(
+                              manageFields
+                                  ? 'Business name and phone are required'
+                                  : 'Phone number is required',
+                              ToastType.error);
                           return;
                         }
 
@@ -359,13 +419,23 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
                         );
 
                         final prov = ctx.read<CollectionNumberProvider>();
-                        if (isEdit) {
-                          await prov.updateNumber(number.id, number);
-                        } else {
-                          await prov.addNumber(number);
-                        }
+                        final ok = isEdit
+                            ? await prov.updateNumber(number.id, number)
+                            : await prov.addNumber(number);
 
-                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (!ctx.mounted) return;
+                        if (!ok) {
+                          ToastProvider.of(ctx).show(
+                            prov.error ?? 'Could not save collection number',
+                            ToastType.error,
+                          );
+                          return;
+                        }
+                        ToastProvider.of(ctx).show(
+                          isEdit ? 'Collection number updated' : 'Collection number added',
+                          ToastType.success,
+                        );
+                        Navigator.pop(ctx);
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.brandPrimary,
@@ -387,7 +457,12 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      nameController.dispose();
+      phoneController.dispose();
+      tillController.dispose();
+      businessIdController.dispose();
+    });
   }
 
   void _confirmDelete(BuildContext context, CollectionNumberProvider provider,
@@ -397,7 +472,7 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Delete Collection Number'),
         content: Text(
-            'Remove ${number.businessName} (${number.network.displayName})?'),
+            'Remove ${number.businessName.isEmpty ? number.phoneNumber : number.businessName} (${number.network.displayName})?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -405,14 +480,24 @@ class _CollectionNumbersScreenState extends State<CollectionNumbersScreen> {
           ),
           TextButton(
             onPressed: () {
-              provider.removeNumber(number.id);
               Navigator.pop(ctx);
+              _removeNumber(provider, number);
             },
             child: const Text('Delete',
                 style: TextStyle(color: AppColors.error)),
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _removeNumber(CollectionNumberProvider provider,
+      BusinessCollectionNumber number) async {
+    final ok = await provider.removeNumber(number.id);
+    if (!mounted || ok) return;
+    ToastProvider.of(context).show(
+      provider.error ?? 'Could not delete collection number',
+      ToastType.error,
     );
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import '../main.dart' show navigatorKey, currentRouteName;
 import '../models/user.dart';
 import '../services/api_client.dart';
 import '../services/storage_service.dart';
@@ -10,9 +11,16 @@ class AuthProvider extends ChangeNotifier {
   String _role = 'user';
   String _riderStatus = 'none';
   bool _isLoading = true;
+  bool _disposed = false;
 
   Timer? _sessionTimer;
-  static const _sessionTimeout = Duration(minutes: 60);
+  static const _sessionTimeout = Duration(days: 14);
+
+  final Completer<void> _readyCompleter = Completer<void>();
+
+  /// Completes once [_initAuth] has finished restoring the cached session
+  /// (success or failure). Await this before reading [isLoggedIn].
+  Future<void> get ready => _readyCompleter.future;
 
   User? get user => _user;
   String get role => _role;
@@ -27,7 +35,7 @@ class AuthProvider extends ChangeNotifier {
   Future<void> _initAuth() async {
     try {
       final data = await StorageService.get<Map<String, dynamic>>(StorageService.keyUser);
-      if (data != null) {
+      if (data != null && _user == null) {
         _user = User.fromJson(data);
         _role = _user!.role;
         _riderStatus = _user!.riderStatus;
@@ -36,9 +44,11 @@ class AuthProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Auth init error: $e');
+    } finally {
+      _isLoading = false;
+      if (!_disposed) notifyListeners();
+      if (!_readyCompleter.isCompleted) _readyCompleter.complete();
     }
-    _isLoading = false;
-    notifyListeners();
   }
 
   Future<void> _refreshProfile() async {
@@ -49,14 +59,17 @@ class AuthProvider extends ChangeNotifier {
       _role = _user!.role;
       _riderStatus = _user!.riderStatus;
       await StorageService.save(StorageService.keyUser, _user!.toJson());
-      notifyListeners();
+      resetSession();
+      if (!_disposed) notifyListeners();
     } catch (e) {
       debugPrint('Profile refresh failed: $e');
     }
   }
 
+  /// Restarts the inactivity window. Called on real user interactions
+  /// (pointer input, app resume) and after a successful profile refresh.
   void resetSession() {
-    _sessionTimer?.cancel();
+    if (_disposed || _user == null) return;
     _startSessionTimer();
   }
 
@@ -64,7 +77,7 @@ class AuthProvider extends ChangeNotifier {
     _sessionTimer?.cancel();
     _sessionTimer = Timer(_sessionTimeout, () {
       if (_user == null) return;
-      debugPrint('Session expired after 60 minutes of inactivity');
+      debugPrint('Session expired after 14 days of inactivity');
       logout();
     });
   }
@@ -129,19 +142,30 @@ class AuthProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     _sessionTimer?.cancel();
-    _isLoading = true;
-    notifyListeners();
+    _sessionTimer = null;
+    _user = null;
+    _role = 'user';
+    _riderStatus = 'none';
+    if (!_disposed) {
+      _isLoading = true;
+      notifyListeners();
+    }
     try {
       await ApiClient.instance.setToken(null);
       await StorageService.remove(StorageService.keyUser);
-      _user = null;
-      _role = 'user';
-      _riderStatus = 'none';
     } catch (e) {
       debugPrint('Logout error: $e');
     }
-    _isLoading = false;
-    notifyListeners();
+    if (!_disposed) {
+      _isLoading = false;
+      notifyListeners();
+    }
+    _navigateToLogin();
+  }
+
+  void _navigateToLogin() {
+    if (currentRouteName == '/login' || currentRouteName == '/splash') return;
+    navigatorKey.currentState?.pushNamedAndRemoveUntil('/login', (route) => false);
   }
 
   Future<void> updateProfile({String? name, String? email}) async {
@@ -185,7 +209,9 @@ class AuthProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _sessionTimer?.cancel();
+    if (!_readyCompleter.isCompleted) _readyCompleter.complete();
     super.dispose();
   }
 }

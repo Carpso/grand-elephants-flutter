@@ -16,14 +16,48 @@ class ToastProvider extends StatefulWidget {
 
   const ToastProvider({super.key, required this.child});
 
-  static ToastContext of(BuildContext context) {
-    final result = context.dependOnInheritedWidgetOfExactType<_InheritedToast>();
-    assert(result != null, 'No ToastProvider found in context');
-    return result!.toastContext;
-  }
-
   @override
   State<ToastProvider> createState() => _ToastProviderState();
+
+  static ToastContext of(BuildContext context) {
+    final result = context.dependOnInheritedWidgetOfExactType<_InheritedToast>();
+    if (result != null) return result.toastContext;
+    // No ToastProvider mounted in this subtree yet: fall back to the app's
+    // ScaffoldMessenger so showing a message never throws.
+    return ToastContext(
+      (message, [type = ToastType.info]) =>
+          _showViaMessenger(context, message, type),
+    );
+  }
+
+  static void _showViaMessenger(BuildContext context, String message, ToastType type) {
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) {
+      debugPrint('toast: $message');
+      return;
+    }
+    final background = switch (type) {
+      ToastType.success => AppColors.success,
+      ToastType.error => AppColors.error,
+      ToastType.info => AppColors.brandDark,
+    };
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
+        backgroundColor: background,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(milliseconds: 2500),
+      ),
+    );
+  }
 }
 
 typedef ToastShowCallback = void Function(String message, [ToastType type]);

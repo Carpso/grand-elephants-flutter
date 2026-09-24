@@ -120,7 +120,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
             title: 'Start Shopping',
             variant: SoftButtonVariant.primary,
             padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-            onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false),
+            onPressed: () => Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false),
           ),
         ],
       ),

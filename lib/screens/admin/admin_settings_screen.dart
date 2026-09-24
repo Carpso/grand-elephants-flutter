@@ -21,9 +21,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   late TextEditingController _descriptionController;
   late TextEditingController _logoController;
   late TextEditingController _taxController;
-  late TextEditingController _openingController;
-  late TextEditingController _closingController;
-  late TextEditingController _supportController;
+  bool _maintenance = false;
 
   @override
   void initState() {
@@ -34,9 +32,26 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _descriptionController = TextEditingController(text: config.appDescription);
     _logoController = TextEditingController(text: config.appLogo);
     _taxController = TextEditingController(text: config.taxRate.toString());
-    _openingController = TextEditingController(text: '08:00');
-    _closingController = TextEditingController(text: '20:00');
-    _supportController = TextEditingController(text: 'support@${config.appName.toLowerCase().replaceAll(' ', '')}.com');
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadSettings());
+  }
+
+  Future<void> _loadSettings() async {
+    try {
+      final res = await ApiClient.instance.get('/api/admin/settings');
+      final data = Map<String, dynamic>.from(res as Map);
+      if (!mounted) return;
+      setState(() {
+        _maintenance = '${data['maintenance_mode'] ?? '0'}' == '1';
+        if (data['vat_pct'] != null && '${data['vat_pct']}'.isNotEmpty) {
+          _taxController.text = '${data['vat_pct']}';
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        ToastProvider.of(context)
+            .show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    }
   }
 
   @override
@@ -46,13 +61,11 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _descriptionController.dispose();
     _logoController.dispose();
     _taxController.dispose();
-    _openingController.dispose();
-    _closingController.dispose();
-    _supportController.dispose();
     super.dispose();
   }
 
   Future<void> _handleSave() async {
+    final messenger = ToastProvider.of(context);
     try {
       final config = context.read<ConfigProvider>();
       await config.updateAppIdentity(
@@ -65,60 +78,49 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         'vat_pct': _taxController.text,
       });
       config.setTaxRate(double.tryParse(_taxController.text) ?? config.taxRate);
-      if (mounted) {
-        ToastProvider.of(context).show('Configuration Saved Successfully', ToastType.success);
+      final saved = await ApiClient.instance.get('/api/config', withAuth: false);
+      final cfg = Map<String, dynamic>.from(saved as Map);
+      if (!mounted) return;
+      final persisted = cfg['appName'] == _nameController.text &&
+          cfg['appSlogan'] == _sloganController.text &&
+          '${cfg['appLogo'] ?? ''}' == _logoController.text;
+      if (persisted) {
+        messenger.show('Configuration Saved Successfully', ToastType.success);
         Navigator.pop(context);
+      } else {
+        messenger.show(
+            'Settings were not persisted on the server, please try again',
+            ToastType.error);
       }
     } catch (e) {
-      if (mounted) {
-        ToastProvider.of(context).show('Failed to save configuration', ToastType.error);
-      }
+      if (!mounted) return;
+      messenger
+          .show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
     }
   }
 
-  Future<void> _toggleMaintenance() async {
-    final config = context.read<ConfigProvider>();
-    final next = !config.maintenanceMode;
-    config.toggleMaintenanceMode();
+  Future<void> _toggleMaintenance(bool next) async {
+    final messenger = ToastProvider.of(context);
+    final previous = _maintenance;
+    setState(() => _maintenance = next);
     try {
       await ApiClient.instance.patch('/api/admin/settings', body: {
         'maintenance_mode': next ? '1' : '0',
       });
       if (mounted) {
-        ToastProvider.of(context).show(next ? 'Maintenance mode enabled.' : 'Maintenance mode disabled.', ToastType.success);
+        messenger.show(next
+            ? 'Maintenance flag enabled and stored.'
+            : 'Maintenance flag disabled.', ToastType.success);
       }
     } catch (e) {
-      if (mounted) {
-        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
-      }
+      if (!mounted) return;
+      setState(() => _maintenance = previous);
+      messenger.show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
     }
-  }
-
-  void _handleBackup() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Run System Backup'),
-        content: const Text(
-          'There is no server-side backup endpoint exposed to this app. Contact the superadmin to schedule a backup from the backend.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              ToastProvider.of(context).show('Backup must be scheduled server-side.', ToastType.info);
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final config = context.watch<ConfigProvider>();
-
     return Scaffold(
       appBar: AppBar(title: const Text('App Settings')),
       body: SingleChildScrollView(
@@ -135,7 +137,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
               child: Column(
                 children: [
                   SoftInput(label: 'Application Name', controller: _nameController, hint: 'Your App Name'),
-                  SoftInput(label: 'Slogan / Tagline', controller: _sloganController, hint: 'Premium Digital Fashion'),
+                  SoftInput(label: 'Slogan / Tagline', controller: _sloganController, hint: 'e.g. Move With Conviction'),
                   SoftInput(label: 'App Logo URL', controller: _logoController, hint: 'https://...'),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,26 +170,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Store Operations',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.brandDark),
-            ),
-            const SizedBox(height: 16),
-            SoftCard(
-              child: Column(
-                children: [
-                  Row(
-                    children: [
-                      Expanded(child: SoftInput(label: 'Opening Time', controller: _openingController, hint: '08:00')),
-                      const SizedBox(width: 12),
-                      Expanded(child: SoftInput(label: 'Closing Time', controller: _closingController, hint: '20:00')),
-                    ],
-                  ),
-                  SoftInput(label: 'Support Email', controller: _supportController, hint: 'support@example.com', keyboardType: TextInputType.emailAddress),
                 ],
               ),
             ),
@@ -225,15 +207,15 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                               ),
                               const SizedBox(height: 4),
                               const Text(
-                                'Immediately lock the app for all non-admin users.',
+                                'Stored flag for the platform — the superadmin console reads it live from the settings API.',
                                 style: TextStyle(color: AppColors.brandMuted, fontSize: 12),
                               ),
                             ],
                           ),
                         ),
                         Switch(
-                          value: config.maintenanceMode,
-                          onChanged: (_) => _toggleMaintenance(),
+                          value: _maintenance,
+                          onChanged: _toggleMaintenance,
                           activeThumbColor: AppColors.error,
                           activeTrackColor: AppColors.error,
                         ),
@@ -245,18 +227,6 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                     label: 'Global Tax Rate (%)',
                     controller: _taxController,
                     keyboardType: TextInputType.number,
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: _handleBackup,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.brandDark,
-                      side: const BorderSide(color: AppColors.error),
-                      backgroundColor: AppColors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    ),
-                    child: const Text('Run System Backup', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),

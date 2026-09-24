@@ -5,6 +5,7 @@ import 'package:grand_elephants/models/product.dart';
 import 'package:grand_elephants/providers/cart_provider.dart';
 import 'package:grand_elephants/providers/catalog_provider.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/services/product_feed_service.dart';
 import 'package:grand_elephants/widgets/product_card.dart';
 import 'package:grand_elephants/widgets/skeleton.dart';
 
@@ -21,6 +22,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String _searchQuery = '';
   String _debouncedSearch = '';
 
+  bool _feedsLoaded = false;
+  List<Product> _newArrivals = [];
+  List<Product> _trending = [];
+  List<Product> _suggested = [];
+
   @override
   void initState() {
     super.initState();
@@ -29,8 +35,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadCatalog() async {
     final catalog = context.read<CatalogProvider>();
+    final feeds = _loadFeeds();
     await catalog.load();
     if (mounted) setState(() => _loading = false);
+    await feeds;
+  }
+
+  /// Curated merchandising rows. Failures resolve to an empty list so the
+  /// row silently hides instead of breaking the home screen.
+  Future<void> _loadFeeds() async {
+    if (mounted) setState(() => _feedsLoaded = false);
+    final feeds = await ProductFeedService.loadAll();
+    if (!mounted) return;
+    setState(() {
+      _newArrivals = feeds['new'] ?? const [];
+      _trending = feeds['trending'] ?? const [];
+      _suggested = feeds['suggested'] ?? const [];
+      _feedsLoaded = true;
+    });
   }
 
   @override
@@ -47,6 +69,26 @@ class _HomeScreenState extends State<HomeScreen> {
         context.read<CatalogProvider>().search(value);
       }
     });
+  }
+
+  static const List<String> _safeBannerPrefixes = [
+    '/product/',
+    '/orders',
+    '/explore',
+    '/cart',
+    '/profile',
+    '/admin',
+    '/support',
+  ];
+
+  /// Banner links come from the server and are unvalidated, so only follow
+  /// ones that point at routes this app actually owns. Anything else is
+  /// ignored rather than pushing a dead "Route not found" page.
+  String? _safeBannerLink(Object? link) {
+    if (link is! String) return null;
+    final value = link.trim();
+    if (value.isEmpty) return null;
+    return _safeBannerPrefixes.any(value.startsWith) ? value : null;
   }
 
   @override
@@ -228,6 +270,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
+                      IconButton(
+                        tooltip: 'Scan',
+                        onPressed: () => Navigator.of(context).pushNamed('/scan'),
+                        icon: const Icon(
+                          Icons.qr_code_scanner,
+                          size: 22,
+                          color: Color(0xFF8E8E93),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -238,6 +289,24 @@ class _HomeScreenState extends State<HomeScreen> {
                 _buildEmptySearchState()
               else ...[
                 _buildBannerCarousel(config, catalog.banners),
+                _buildProductRow(
+                  eyebrow: 'JUST LANDED',
+                  title: 'New Arrivals',
+                  products: _newArrivals,
+                  cart: cart,
+                ),
+                _buildProductRow(
+                  eyebrow: 'MOST WANTED',
+                  title: 'Trending Now',
+                  products: _trending,
+                  cart: cart,
+                ),
+                _buildProductRow(
+                  eyebrow: 'PICKED FOR YOU',
+                  title: 'Suggested For You',
+                  products: _suggested,
+                  cart: cart,
+                ),
                 _buildFeaturedSection(displayProducts, cart, config),
                 _buildCategoriesSection(categories),
               ],
@@ -346,8 +415,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
           final banner = banners[index];
           return GestureDetector(
-            onTap: () => Navigator.of(context)
-                .pushNamed(banner['link'] as String? ?? '/product/1'),
+            onTap: () {
+              final link = _safeBannerLink(banner['link']);
+              if (link == null) return;
+              Navigator.of(context).pushNamed(link);
+            },
             child: Container(
               width: 350,
               margin: const EdgeInsets.only(right: 20),
@@ -452,6 +524,97 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  /// A merchandising row: eyebrow + title + "See all" over a horizontal
+  /// carousel of ProductCards. Hidden when the feed is empty or failed.
+  Widget _buildProductRow({
+    required String eyebrow,
+    required String title,
+    required List<Product> products,
+    required CartProvider cart,
+  }) {
+    if (_feedsLoaded && products.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 16, 32, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    eyebrow,
+                    style: const TextStyle(
+                      color: AppColors.brandMuted,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 3,
+                    ),
+                  ),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.brandDark,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: () => Navigator.of(context).pushNamed('/explore'),
+                child: const Text(
+                  'See all',
+                  style: TextStyle(
+                    color: AppColors.brandPrimary,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 360,
+            child: !_feedsLoaded
+                ? ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: const [
+                      Skeleton(width: 224, height: 340, borderRadius: 16),
+                      SizedBox(width: 16),
+                      Skeleton(width: 224, height: 340, borderRadius: 16),
+                      SizedBox(width: 16),
+                      Skeleton(width: 224, height: 340, borderRadius: 16),
+                    ],
+                  )
+                : ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: products.length,
+                    itemBuilder: (context, index) {
+                      final product = products[index];
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 16),
+                        child: ProductCard(
+                          product: product,
+                          onAddToCart: () => cart.addToCart(product),
+                          onTap: () => Navigator.of(context)
+                              .pushNamed('/product/${product.id}'),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }

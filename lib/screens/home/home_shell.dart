@@ -61,8 +61,27 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-class _HomeShellState extends State<HomeShell> {
+class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<AuthProvider>().resetSession();
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -81,10 +100,12 @@ class _HomeShellState extends State<HomeShell> {
 
     final isTablet = MediaQuery.of(context).size.width >= 600;
 
-    if (isTablet) {
-      return _buildTabletLayout(configs);
-    }
-    return _buildPhoneLayout(configs);
+    return Listener(
+      onPointerDown: (_) => context.read<AuthProvider>().resetSession(),
+      child: isTablet
+          ? _buildTabletLayout(configs)
+          : _buildPhoneLayout(configs),
+    );
   }
 
   Widget _buildPhoneLayout(List<_TabConfig> configs) {

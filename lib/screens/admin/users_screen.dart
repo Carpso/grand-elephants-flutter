@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/models/user.dart';
 import 'package:grand_elephants/providers/admin_provider.dart';
+import 'package:grand_elephants/providers/auth_provider.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 
@@ -25,8 +26,17 @@ class _UsersScreenState extends State<UsersScreen> {
   }
 
   Future<void> _changeRole(User user) async {
-    final roles = ['user', 'rider', 'business', 'employee', 'admin'];
+    final auth = context.read<AuthProvider>();
     final admin = context.read<AdminProvider>();
+    // The server only lets a superadmin grant the superadmin role.
+    final roles = [
+      'user',
+      'rider',
+      'business',
+      'employee',
+      'admin',
+      if (auth.role == 'superadmin') 'superadmin',
+    ];
     final role = await showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
@@ -85,15 +95,26 @@ class _UsersScreenState extends State<UsersScreen> {
               onRefresh: () => admin.loadUsers(),
               child: users.isEmpty
                   ? ListView(
-                      children: const [
-                        SizedBox(height: 120),
-                        Icon(Icons.people_outline, size: 56, color: AppColors.brandMuted),
-                        SizedBox(height: 12),
-                        Text(
-                          'No users found',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: AppColors.brandMuted),
+                      children: [
+                        const SizedBox(height: 120),
+                        Icon(
+                          admin.error != null ? Icons.cloud_off : Icons.people_outline,
+                          size: 56,
+                          color: AppColors.brandMuted,
                         ),
+                        const SizedBox(height: 12),
+                        Text(
+                          admin.error != null
+                              ? '${admin.error}'.replaceFirst('Exception: ', '')
+                              : 'No users found',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppColors.brandMuted),
+                        ),
+                        if (admin.error != null)
+                          TextButton(
+                            onPressed: () => admin.loadUsers(),
+                            child: const Text('Retry'),
+                          ),
                       ],
                     )
                   : ListView.builder(

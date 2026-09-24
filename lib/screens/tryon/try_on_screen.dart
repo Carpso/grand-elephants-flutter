@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -5,9 +7,9 @@ import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/models/product.dart';
 import 'package:grand_elephants/providers/cart_provider.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
-import 'package:grand_elephants/widgets/soft_input.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 
 class TryOnScreen extends StatefulWidget {
@@ -24,12 +26,19 @@ class _TryOnScreenState extends State<TryOnScreen>
   bool _showAR = false;
   bool _isCameraMode = false;
 
+  /// Product passed in via `Navigator.pushNamed('/try-on', arguments: product)`.
+  Product? _product;
+  bool _argsResolved = false;
+
   String? _productImageUrl;
   double _scale = 1.0;
   Offset _offset = Offset.zero;
+  double _scaleAtGestureStart = 1.0;
 
   CameraController? _cameraController;
   bool _cameraReady = false;
+  Uint8List? _capturedBytes;
+  bool _capturing = false;
 
   late final AnimationController _contentController;
   late final Animation<double> _contentOpacity;
@@ -68,29 +77,75 @@ class _TryOnScreenState extends State<TryOnScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_argsResolved) return;
+    _argsResolved = true;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Product) {
+      _product = args;
+      if (args.image.isNotEmpty) {
+        _productImageUrl = args.image;
+        _showAR = true;
+        _arItemController.forward(from: 0);
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _linkController.dispose();
     _contentController.dispose();
     _arItemController.dispose();
-    _cameraController?.dispose();
+    _stopCamera();
     super.dispose();
   }
 
+  /// Releases the camera on every exit path (close button, navigation, dispose).
+  Future<void> _stopCamera() async {
+    final controller = _cameraController;
+    _cameraController = null;
+    _cameraReady = false;
+    if (controller == null) return;
+    try {
+      await controller.dispose();
+    } catch (_) {
+      // Camera was never fully initialised or already released.
+    }
+  }
+
   Future<void> _initCamera() async {
+    await _stopCamera();
+    CameraController? controller;
     try {
       final cameras = await availableCameras();
-      if (cameras.isEmpty) return;
-      final controller = CameraController(
+      if (cameras.isEmpty) {
+        if (mounted) setState(() => _cameraReady = false);
+        return;
+      }
+      controller = CameraController(
         cameras.first,
         ResolutionPreset.high,
         enableAudio: false,
       );
       _cameraController = controller;
       await controller.initialize();
-      if (mounted) setState(() => _cameraReady = true);
+      if (!mounted) {
+        await _disposeController(controller);
+        return;
+      }
+      setState(() => _cameraReady = true);
     } catch (_) {
+      if (controller != null) await _disposeController(controller);
       if (mounted) setState(() => _cameraReady = false);
     }
+  }
+
+  Future<void> _disposeController(CameraController controller) async {
+    try {
+      await controller.dispose();
+    } catch (_) {}
+    if (identical(_cameraController, controller)) _cameraController = null;
   }
 
   Future<void> _handleStartCamera() async {
@@ -98,25 +153,72 @@ class _TryOnScreenState extends State<TryOnScreen>
       _isCameraMode = true;
       _showAR = true;
       _isProcessing = false;
+      _capturedBytes = null;
     });
     _arItemController.forward(from: 0);
     await _initCamera();
   }
 
-  Future<void> _handleFetchLink() async {
-    final url = _linkController.text.trim();
-    if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
-      ToastProvider.of(context).show('Enter a valid http(s) image URL', ToastType.error);
-      return;
+  Future<void> _handleExitAR() async {
+    await _stopCamera();
+    if (!mounted) return;
+    setState(() {
+      _showAR = false;
+      _isCameraMode = false;
+      _capturedBytes = null;
+    });
+  }
+
+  Future<void> _handleCapture() async {
+    final controller = _cameraController;
+    if (controller == null || !_cameraReady || _capturing) return;
+    setState(() => _capturing = true);
+    try {
+      final file = await controller.takePicture();
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _capturedBytes = bytes;
+        _capturing = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _capturing = false);
+      ToastProvider.of(context).show('Could not capture a photo', ToastType.error);
     }
+  }
+
+  void _handleResumePreview() {
+    setState(() => _capturedBytes = null);
+  }
+
+  void _handleResetOverlay() {
+    setState(() {
+      _scale = 1.0;
+      _offset = Offset.zero;
+    });
+  }
+
+  Future<void> _handleStartTryOn() async {
+    final typedUrl = _linkController.text.trim();
+    final fallbackImage = _product?.image ?? '';
+    final url = typedUrl.isNotEmpty ? typedUrl : fallbackImage;
+    if (url.isEmpty) return;
+    if (typedUrl.isNotEmpty) {
+      final uri = Uri.tryParse(typedUrl);
+      if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
+        ToastProvider.of(context).show('Enter a valid http(s) image URL', ToastType.error);
+        return;
+      }
+    }
+    final isNetworkUrl = url.startsWith('http://') || url.startsWith('https://');
     setState(() {
       _isProcessing = true;
       _isCameraMode = false;
+      _capturedBytes = null;
     });
     try {
-      await precacheImage(NetworkImage(url), context);
+      if (isNetworkUrl) await precacheImage(NetworkImage(url), context);
       if (!mounted) return;
       setState(() {
         _isProcessing = false;
@@ -133,81 +235,26 @@ class _TryOnScreenState extends State<TryOnScreen>
     }
   }
 
-  String _deriveName(String source) {
-    if (source.isEmpty) return 'Try-On Item';
-    final uri = Uri.tryParse(source);
-    final segment = (uri?.pathSegments.isNotEmpty ?? false)
-        ? uri!.pathSegments.last
-        : source.split('/').last;
-    final cleaned = segment.split('.').first.replaceAll(RegExp(r'[-_]+'), ' ').trim();
-    return cleaned.isEmpty ? 'Try-On Item' : cleaned;
-  }
-
   Future<void> _handleAddToCart() async {
+    final product = _product;
+    if (product == null) return;
     final cart = context.read<CartProvider>();
-    final nameCtrl = TextEditingController(
-      text: _deriveName(_productImageUrl ?? _linkController.text),
-    );
-    final priceCtrl = TextEditingController();
-    final result = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Add to Cart'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SoftInput(
-              label: 'Product Name',
-              controller: nameCtrl,
-              hint: 'Item name',
-            ),
-            SoftInput(
-              label: 'Price',
-              controller: priceCtrl,
-              hint: '0.00',
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-
-    if (result == true) {
-      final name = nameCtrl.text.trim();
-      final price = double.tryParse(priceCtrl.text.trim()) ?? 0;
-      if (name.isEmpty || price <= 0) {
-        if (mounted) {
-          ToastProvider.of(context)
-              .show('Provide a name and a valid price', ToastType.error);
-        }
-      } else {
-        final product = Product(
-          id: 'tryon-${DateTime.now().millisecondsSinceEpoch}',
-          name: name,
-          price: price,
-          priceCents: (price * 100).round(),
-          image: _productImageUrl ?? '',
-          description: 'Added via Virtual Try-On',
-          category: 'Try-On',
-        );
-        await cart.addToCart(product);
-        if (!mounted) return;
-        ToastProvider.of(context).show('$name added to cart', ToastType.success);
-        Navigator.of(context).pushNamed('/cart/checkout');
-      }
+    try {
+      await cart.addToCart(product);
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context)
+          .show('Could not add ${product.name} to cart', ToastType.error);
+      return;
     }
-    nameCtrl.dispose();
-    priceCtrl.dispose();
+    await _stopCamera();
+    if (!mounted) return;
+    setState(() {
+      _isCameraMode = false;
+      _capturedBytes = null;
+    });
+    ToastProvider.of(context).show('${product.name} added to cart', ToastType.success);
+    Navigator.of(context).pushNamed('/cart/checkout');
   }
 
   @override
@@ -218,6 +265,61 @@ class _TryOnScreenState extends State<TryOnScreen>
       backgroundColor: AppColors.brandDark,
       body: SafeArea(
         child: _showAR ? _buildARView(config) : _buildInputView(config),
+      ),
+    );
+  }
+
+  Widget _buildSelectedProductCard(ConfigProvider config) {
+    final product = _product;
+    if (product == null) return const SizedBox.shrink();
+    return SoftCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              width: 56,
+              height: 56,
+              color: AppColors.softSurface,
+              child: ProductImage(src: product.image, fit: BoxFit.contain),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: AppColors.brandDark,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'TRY-ON ITEM  ·  ${config.formatPrice(product.price)}',
+                  style: const TextStyle(
+                    color: AppColors.brandMuted,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Icon(
+            Icons.check_circle,
+            color: AppColors.brandPrimary,
+            size: 22,
+          ),
+        ],
       ),
     );
   }
@@ -273,15 +375,32 @@ class _TryOnScreenState extends State<TryOnScreen>
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
-                'Paste a product image link or use your camera to preview an item against your camera feed.',
-                style: TextStyle(
+              Text(
+                _product != null
+                    ? '${_product!.name} is ready to try on. Use your camera or paste an image link to preview it against your feed.'
+                    : 'Paste a product image link or use your camera to preview an item against your camera feed.',
+                style: const TextStyle(
                   color: Color(0xFF9CA3AF),
                   fontSize: 16,
                   height: 1.5,
                 ),
               ),
-              const SizedBox(height: 40),
+              if (_product == null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Open a product to try it on and buy.',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 13,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 32),
+              if (_product != null) ...[
+                _buildSelectedProductCard(config),
+                const SizedBox(height: 24),
+              ],
               SoftCard(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -393,9 +512,11 @@ class _TryOnScreenState extends State<TryOnScreen>
                       title: _isProcessing ? 'Loading image...' : 'Start Virtual Try-On',
                       variant: SoftButtonVariant.secondary,
                       isLoading: _isProcessing,
-                      onPressed: _isProcessing || _linkController.text.trim().isEmpty
+                      onPressed: _isProcessing ||
+                              (_linkController.text.trim().isEmpty &&
+                                  (_product?.image.isEmpty ?? true))
                           ? null
-                          : _handleFetchLink,
+                          : _handleStartTryOn,
                     ),
                   ],
                 ),
@@ -462,8 +583,15 @@ class _TryOnScreenState extends State<TryOnScreen>
               child: Transform.translate(
                 offset: _offset,
                 child: GestureDetector(
-                  onPanUpdate: (details) =>
-                      setState(() => _offset += details.delta),
+                  onScaleStart: (_) => _scaleAtGestureStart = _scale,
+                  onScaleUpdate: (details) {
+                    setState(() {
+                      _offset += details.focalPointDelta;
+                      _scale = (_scaleAtGestureStart * details.scale)
+                          .clamp(0.3, 2.0)
+                          .toDouble();
+                    });
+                  },
                   child: Container(
                     width: 240,
                     height: 240,
@@ -478,8 +606,8 @@ class _TryOnScreenState extends State<TryOnScreen>
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: Image.network(
-                        _productImageUrl!,
+                      child: ProductImage(
+                        src: _productImageUrl!,
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) => Container(
                           color: AppColors.softSurface,
@@ -499,45 +627,18 @@ class _TryOnScreenState extends State<TryOnScreen>
         Positioned(
           top: 24,
           left: 24,
-          child: GestureDetector(
-            onTap: () => setState(() => _showAR = false),
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-              ),
-              child: const Icon(
-                Icons.close,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
+          right: 24,
+          child: Row(
+            children: [
+              _roundAction(Icons.close, () => _handleExitAR(), tooltip: 'Close'),
+              if (!_isCameraMode) ...[
+                const SizedBox(width: 12),
+                _roundAction(Icons.camera_alt, () => _handleStartCamera(),
+                    tooltip: 'Open camera'),
+              ],
+            ],
           ),
         ),
-        if (_productImageUrl != null)
-          Positioned(
-            top: 32,
-            right: 24,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-              ),
-              child: const Text(
-                'Drag to move',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
         Positioned(
           left: 24,
           right: 24,
@@ -548,23 +649,56 @@ class _TryOnScreenState extends State<TryOnScreen>
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Try-On Preview',
-                  style: TextStyle(
-                    color: AppColors.brandDark,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 18,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _product?.name ?? 'Try-On Preview',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: AppColors.brandDark,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ),
+                    if (_product != null) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        config.formatPrice(_product!.price),
+                        style: const TextStyle(
+                          color: AppColors.brandPrimary,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 18,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Drag the item to position it, then resize.',
-                  style: TextStyle(
-                    color: AppColors.brandMuted,
-                    fontSize: 12,
+                const SizedBox(height: 8),
+                if (_productImageUrl != null)
+                  _buildHintChip('Drag to position • Pinch to scale')
+                else
+                  const Text(
+                    'Open a product to try it on and buy.',
+                    style: TextStyle(
+                      color: AppColors.brandMuted,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
+                if (_productImageUrl != null && _product == null) ...[
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Open a product to try it on and buy.',
+                    style: TextStyle(
+                      color: AppColors.brandMuted,
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     const Icon(Icons.zoom_out, size: 18, color: AppColors.brandMuted),
@@ -578,16 +712,63 @@ class _TryOnScreenState extends State<TryOnScreen>
                       ),
                     ),
                     const Icon(Icons.zoom_in, size: 18, color: AppColors.brandMuted),
+                    const SizedBox(width: 4),
+                    Tooltip(
+                      message: 'Reset',
+                      child: IconButton(
+                        onPressed: _handleResetOverlay,
+                        icon: const Icon(
+                          Icons.restart_alt,
+                          size: 22,
+                          color: AppColors.brandDark,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 32,
+                          minHeight: 32,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: SoftButton(
-                    title: 'Add to Cart',
-                    variant: SoftButtonVariant.primary,
-                    onPressed: _handleAddToCart,
-                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (_isCameraMode && _cameraReady) ...[
+                      Expanded(
+                        child: SoftButton(
+                          title: _capturedBytes != null
+                              ? 'Resume'
+                              : (_capturing ? 'Saving…' : 'Capture'),
+                          variant: SoftButtonVariant.secondary,
+                          isLoading: _capturing,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                          icon: _capturedBytes == null && !_capturing
+                              ? const Icon(Icons.camera_alt, size: 18)
+                              : null,
+                          onPressed: _capturedBytes != null
+                              ? _handleResumePreview
+                              : _handleCapture,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
+                    Expanded(
+                      child: SoftButton(
+                        title: 'Add to Cart',
+                        variant: SoftButtonVariant.primary,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 16,
+                        ),
+                        onPressed:
+                            _product == null ? null : () => _handleAddToCart(),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -597,7 +778,70 @@ class _TryOnScreenState extends State<TryOnScreen>
     );
   }
 
+  Widget _buildHintChip(String message) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.brandPrimary.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppColors.brandPrimary.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(
+            Icons.touch_app,
+            size: 14,
+            color: AppColors.brandDark,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              message,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.brandDark,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _roundAction(IconData icon, VoidCallback onTap, {String? tooltip}) {
+    final button = GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 48,
+        height: 48,
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.4),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        ),
+        child: Icon(icon, color: Colors.white, size: 24),
+      ),
+    );
+    if (tooltip == null) return button;
+    return Tooltip(message: tooltip, child: button);
+  }
+
   Widget _buildARBackground() {
+    final captured = _capturedBytes;
+    if (captured != null) {
+      return Image.memory(
+        captured,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        gaplessPlayback: true,
+      );
+    }
     final controller = _cameraController;
     if (_isCameraMode && _cameraReady && controller != null) {
       return Center(child: CameraPreview(controller));

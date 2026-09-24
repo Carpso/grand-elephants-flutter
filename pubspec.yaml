@@ -1,5 +1,5 @@
 name: grand_elephants
-description: "Grand Elephants - Premium Marketplace & Luxury Heritage"
+description: "Grand Elephants - Move With Conviction. Premium bags marketplace and luxury heritage storefront."
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -26,11 +26,25 @@ dependencies:
   latlong2: ^0.9.1
   firebase_core: ^4.15.0
   firebase_messaging: ^16.7.0
+  pdf: ^3.12.0
+  printing: ^5.14.3
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: assets/images/grandelephants_icon.jpg
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: assets/images/grandelephants_icon.jpg
+  remove_alpha_ios: true
+  web:
+    generate: true
+    image_path: assets/images/grandelephants_icon.jpg
 
 flutter:
   uses-material-design: true

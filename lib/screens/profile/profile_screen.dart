@@ -9,6 +9,8 @@ import 'package:grand_elephants/providers/cart_provider.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
 import 'package:grand_elephants/providers/wishlist_provider.dart';
 import 'package:grand_elephants/services/api_client.dart';
+import 'package:grand_elephants/services/image_util.dart';
+import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
 import 'package:grand_elephants/widgets/toast.dart';
@@ -52,14 +54,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
     if (picked == null) return;
 
+    final dataUri = await imageToDataUri(picked, maxDimension: 720, quality: 80);
+    if (dataUri == null) {
+      if (!mounted) return;
+      ToastProvider.of(context)
+          .show('Could not read that image, pick another one', ToastType.error);
+      return;
+    }
+
     try {
-      await ApiClient.instance.patch('/api/me', body: {'profilePhoto': picked.path});
+      await ApiClient.instance.patch('/api/me', body: {'profilePhoto': dataUri});
       await auth.updateProfile(name: user.name, email: user.email);
       if (!mounted) return;
       ToastProvider.of(context).show('Profile photo updated', ToastType.success);
     } catch (e) {
       if (!mounted) return;
-      ToastProvider.of(context).show('Could not update profile photo', ToastType.error);
+      ToastProvider.of(context).show(
+        '$e'.replaceFirst('Exception: ', '').replaceFirst('ApiException: ', ''),
+        ToastType.error,
+      );
     }
   }
 
@@ -94,7 +107,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   if (role == 'user' && riderStatus != 'approved')
                     _buildRiderCard(config, riderStatus),
                   _buildSectionTitle('Management'),
-                  _buildBusinessSuiteCard(),
+                  if (role == 'superadmin')
+                    _buildSuiteCard(
+                      title: 'Superadmin Console',
+                      subtitle: 'PLATFORM OVERSIGHT',
+                      icon: Icons.admin_panel_settings,
+                      route: '/superadmin/dashboard',
+                    ),
                   if (role == 'admin' || role == 'superadmin')
                     Padding(
                       padding: const EdgeInsets.only(bottom: 32),
@@ -104,6 +123,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: const Icon(Icons.dashboard, size: 20, color: Colors.white),
                         onPressed: () => Navigator.of(context).pushNamed('/admin/dashboard'),
                       ),
+                    ),
+                  if (role == 'business' || (user?.businessId ?? '').isNotEmpty)
+                    _buildSuiteCard(
+                      title: 'Business Suite',
+                      subtitle: 'FINANCE & ANALYTICS',
+                      icon: Icons.business_center,
+                      route: '/business/dashboard',
+                    )
+                  else if (role == 'user')
+                    _buildSuiteCard(
+                      title: 'Become a Seller',
+                      subtitle: 'OPEN YOUR OWN SHOP',
+                      icon: Icons.storefront,
+                      route: '/business/apply',
                     ),
                   _buildSectionTitle('Settings'),
                   _buildMenuList(),
@@ -169,15 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                     color: AppColors.softSurface,
                   ),
-                  child: ClipOval(
-                    child: user?.profilePhoto != null && user!.profilePhoto!.isNotEmpty
-                        ? Image.network(
-                            user.profilePhoto!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _InitialsAvatar(user: user),
-                          )
-                        : _InitialsAvatar(user: user),
-                  ),
+                  child: ClipOval(child: _buildAvatar(user)),
                 ),
               ),
               Positioned(
@@ -252,6 +277,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// The profile photo may come back as a hosted URL or as the `data:` URI
+  /// written by [_pickProfileImage]; `ProductImage` handles both plus local
+  /// files and bundled assets, falling back to the initials avatar.
+  Widget _buildAvatar(User? user) {
+    final photo = user?.profilePhoto?.trim() ?? '';
+    if (photo.isEmpty) return _InitialsAvatar(user: user);
+    return ProductImage(
+      src: photo,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _InitialsAvatar(user: user),
+    );
+  }
+
   Widget _buildStatsRow(int ordersCount, int wishlistCount) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -317,13 +355,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildBusinessSuiteCard() {
+  Widget _buildSuiteCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required String route,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 24),
       child: GestureDetector(
         onTap: () {
           HapticFeedback.lightImpact();
-          Navigator.of(context).pushNamed('/business/dashboard');
+          Navigator.of(context).pushNamed(route);
         },
         child: Container(
           padding: const EdgeInsets.all(20),
@@ -353,24 +396,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       color: AppColors.brandPrimary,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.business_center, size: 24, color: Colors.black),
+                    child: Icon(icon, size: 24, color: Colors.black),
                   ),
                   const SizedBox(width: 16),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text(
-                        'Business Suite',
-                        style: TextStyle(
+                        title,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
-                        'FINANCE & ANALYTICS',
-                        style: TextStyle(
+                        subtitle,
+                        style: const TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: AppColors.brandPrimary,

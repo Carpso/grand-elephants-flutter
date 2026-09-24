@@ -3,6 +3,7 @@ import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/models/product.dart';
 import 'package:grand_elephants/screens/admin/add_product_screen.dart';
 import 'package:grand_elephants/services/api_client.dart';
+import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 
@@ -15,6 +16,7 @@ class InventoryScreen extends StatefulWidget {
 
 class _InventoryScreenState extends State<InventoryScreen> {
   List<Product> _products = [];
+  String? _error;
 
   @override
   void initState() {
@@ -24,16 +26,22 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   Future<void> _load() async {
     try {
-      final res = await ApiClient.instance.get('/api/businesses/me/products');
+      final res = await ApiClient.instance.get('/api/admin/products');
       if (mounted) {
         setState(() {
           _products = (res as List)
               .map((e) => Product.fromJson(e as Map<String, dynamic>))
               .toList();
+          _error = null;
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _products = []);
+      if (mounted) {
+        setState(() {
+          _products = [];
+          _error = '$e'.replaceFirst('Exception: ', '');
+        });
+      }
     }
   }
 
@@ -61,7 +69,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await ApiClient.instance.delete('/api/businesses/me/products/${product.id}');
+      await ApiClient.instance.delete('/api/admin/products/${product.id}');
       await _load();
       if (mounted) {
         ToastProvider.of(context).show('${product.name} deleted.', ToastType.success);
@@ -113,7 +121,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
     if (saved != true || !mounted) return;
     try {
-      await ApiClient.instance.put('/api/businesses/me/products/${product.id}', body: {
+      await ApiClient.instance.put('/api/admin/products/${product.id}', body: {
         'name': nameController.text,
         'price': double.tryParse(priceController.text) ?? product.price,
         'stock': int.tryParse(stockController.text) ?? product.stock,
@@ -127,21 +135,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
       }
     }
-  }
-
-  Widget _buildImage(String image) {
-    if (image.startsWith('http://') || image.startsWith('https://')) {
-      return Image.network(
-        image,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(color: Colors.grey[200], child: const Icon(Icons.image, color: AppColors.brandMuted)),
-      );
-    }
-    return Image.asset(
-      image,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(color: Colors.grey[200], child: const Icon(Icons.image, color: AppColors.brandMuted)),
-    );
   }
 
   @override
@@ -172,15 +165,24 @@ class _InventoryScreenState extends State<InventoryScreen> {
         child: _products.isEmpty
             ? ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                children: const [
-                  SizedBox(height: 120),
-                  Icon(Icons.inventory_2, size: 56, color: AppColors.brandMuted),
-                  SizedBox(height: 12),
-                  Text(
-                    'No products in inventory',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.brandMuted),
+                children: [
+                  const SizedBox(height: 120),
+                  Icon(
+                    _error != null ? Icons.cloud_off : Icons.inventory_2,
+                    size: 56,
+                    color: AppColors.brandMuted,
                   ),
+                  const SizedBox(height: 12),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      _error ?? 'No products in inventory',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: AppColors.brandMuted),
+                    ),
+                  ),
+                  if (_error != null)
+                    TextButton(onPressed: _load, child: const Text('Retry')),
                 ],
               )
             : ListView.builder(
@@ -199,7 +201,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             child: SizedBox(
                               width: 80,
                               height: 80,
-                              child: _buildImage(product.image),
+                              child: ProductImage(src: product.image),
                             ),
                           ),
                           const SizedBox(width: 16),

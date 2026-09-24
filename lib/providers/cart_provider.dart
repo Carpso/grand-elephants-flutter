@@ -137,6 +137,8 @@ class CartProvider extends ChangeNotifier {
   }
 
   /// Places the order server-side (payment collected via Lipila server webhook).
+  /// [tpin] is the optional buyer ZRA TPIN — exactly 10 digits, already
+  /// normalised by the checkout screen.
   /// Returns the server order and clears the cart on success.
   Future<Order?> submitOrder({
     required String paymentMethod,
@@ -145,6 +147,7 @@ class CartProvider extends ChangeNotifier {
     double deliveryKm = 0,
     String? customerPhone,
     String? notes,
+    String? tpin,
   }) async {
     if (_items.isEmpty) return null;
 
@@ -158,6 +161,7 @@ class CartProvider extends ChangeNotifier {
       'deliveryKm': deliveryKm,
       'customerPhone': customerPhone ?? '',
       'notes': notes ?? '',
+      if (tpin != null && tpin.isNotEmpty) 'tpin': tpin,
     };
 
     final res = await ApiClient.instance.post('/api/orders', body: payload);

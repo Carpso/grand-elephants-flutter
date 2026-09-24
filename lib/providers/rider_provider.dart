@@ -143,10 +143,17 @@ class RiderProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> updateOrderStatus(String orderId, String status) async {
+  /// Server accepts `Out for Delivery` / `Delivered` only, plus an optional
+  /// `proofPhoto` (data URI) stored on the order.
+  Future<void> updateOrderStatus(String orderId, String status,
+      {String? proofPhoto}) async {
     try {
       await ApiClient.instance.post('/api/orders/$orderId/rider-status',
-          body: {'status': status});
+          body: {
+            'status': status,
+            if (proofPhoto != null && proofPhoto.isNotEmpty)
+              'proofPhoto': proofPhoto,
+          });
       await loadDeliveries();
       await load();
     } catch (e) {

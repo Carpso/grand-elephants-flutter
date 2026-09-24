@@ -4,6 +4,7 @@ import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/models/cart_item.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
 import 'package:grand_elephants/providers/rider_provider.dart';
+import 'package:grand_elephants/screens/rider/delivery_camera_screen.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
 import 'package:grand_elephants/widgets/toast.dart';
@@ -293,15 +294,19 @@ class _RiderHomeScreenState extends State<RiderHomeScreen> {
           const SizedBox(height: 16),
           if (_activeTab == 'incoming')
             SoftButton(
-              title: 'Accept Delivery',
+              title: 'Start Delivery',
               variant: SoftButtonVariant.primary,
-              onPressed: () => _updateOrderStatus(order, 'Shipped'),
+              onPressed: () => _updateOrderStatus(order, 'Out for Delivery'),
             ),
           if (_activeTab == 'active')
             SoftButton(
-              title: 'Mark Delivered',
+              title: 'Capture Proof & Deliver',
               variant: SoftButtonVariant.secondary,
-              onPressed: () => _updateOrderStatus(order, 'Delivered'),
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => DeliveryCameraScreen(orderId: order.id),
+                ),
+              ),
             ),
         ],
       ),

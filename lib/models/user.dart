@@ -16,10 +16,16 @@ class RiderLocation {
       };
 
   factory RiderLocation.fromJson(Map<String, dynamic> json) => RiderLocation(
-        lat: (json['lat'] as num).toDouble(),
-        lng: (json['lng'] as num).toDouble(),
-        address: json['address'] as String? ?? '',
+        lat: _asDouble(json['lat']),
+        lng: _asDouble(json['lng']),
+        address: '${json['address'] ?? ''}',
       );
+}
+
+/// Never throws: accepts num, numeric strings and null.
+double _asDouble(Object? value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse('${value ?? ''}') ?? 0;
 }
 
 class User {
@@ -70,22 +76,24 @@ class User {
       };
 
   factory User.fromJson(Map<String, dynamic> json) => User(
-        uid: '${json['uid']}',
-        name: json['name'] as String? ?? '',
-        email: json['email'] as String? ?? '',
-        phone: json['phone'] as String? ?? '',
-        role: json['role'] as String? ?? 'user',
-        riderStatus: json['riderStatus'] as String? ?? 'none',
-        riderLocation: json['riderLocation'] != null
+        uid: '${json['uid'] ?? ''}',
+        name: '${json['name'] ?? ''}',
+        email: '${json['email'] ?? ''}',
+        phone: '${json['phone'] ?? ''}',
+        role: '${json['role'] ?? 'user'}',
+        riderStatus: '${json['riderStatus'] ?? 'none'}',
+        riderLocation: json['riderLocation'] is Map
             ? RiderLocation.fromJson(
-                json['riderLocation'] as Map<String, dynamic>)
+                Map<String, dynamic>.from(json['riderLocation'] as Map))
             : null,
-        profilePhoto: json['profilePhoto'] as String?,
-        bikePhoto: json['bikePhoto'] as String?,
-        businessId: json['businessId'] as String?,
-        tpin: json['tpin'] as String?,
-        notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
-        createdAt: json['createdAt'] as String?,
+        profilePhoto: json['profilePhoto']?.toString(),
+        bikePhoto: json['bikePhoto']?.toString(),
+        businessId: json['businessId']?.toString(),
+        tpin: json['tpin']?.toString(),
+        notificationsEnabled: json['notificationsEnabled'] is bool
+            ? json['notificationsEnabled'] as bool
+            : true,
+        createdAt: json['createdAt']?.toString(),
       );
 
   User copyWith({

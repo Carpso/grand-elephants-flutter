@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/services/api_client.dart';
-import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
-import 'package:grand_elephants/widgets/soft_input.dart';
-import 'package:grand_elephants/widgets/toast.dart';
 
 class AdminNotificationsScreen extends StatefulWidget {
   const AdminNotificationsScreen({super.key});
@@ -14,10 +11,8 @@ class AdminNotificationsScreen extends StatefulWidget {
 }
 
 class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
-  final _titleController = TextEditingController();
-  final _bodyController = TextEditingController();
-  String _target = 'all';
   bool _loading = true;
+  String? _error;
   List<Map<String, dynamic>> _auditLogs = [];
   List<Map<String, dynamic>> _lipilaLogs = [];
 
@@ -27,15 +22,11 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _titleController.dispose();
-    _bodyController.dispose();
-    super.dispose();
-  }
-
   Future<void> _load() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final results = await Future.wait([
         ApiClient.instance.get('/api/admin/actions'),
@@ -51,50 +42,46 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             .toList();
       });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _auditLogs = [];
-          _lipilaLogs = [];
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _auditLogs = [];
+        _lipilaLogs = [];
+        _error = '$e'.replaceFirst('Exception: ', '');
+      });
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  void _handleSend() {
-    if (_titleController.text.isEmpty || _bodyController.text.isEmpty) {
-      ToastProvider.of(context).show('Please enter both a title and a message body.', ToastType.error);
-      return;
-    }
-    ToastProvider.of(context).show(
-      'Push broadcasting is handled server-side. There is no admin push endpoint yet.',
-      ToastType.info,
-    );
-  }
-
   String _logTitle(Map<String, dynamic> item) {
-    final candidates = ['action', 'type', 'message', 'description', 'id'];
-    for (final key in candidates) {
-      final value = item[key];
-      if (value != null && '$value'.isNotEmpty) return '$value';
-    }
+    final action = '${item['action'] ?? item['kind'] ?? ''}';
+    if (action.isNotEmpty) return action.replaceAll('_', ' ');
+    final message = '${item['message'] ?? ''}';
+    if (message.isNotEmpty) return message;
     return 'Event';
   }
 
   String _logDetail(Map<String, dynamic> item) {
-    final candidates = ['createdAt', 'time', 'phone', 'details', 'amount', 'email'];
-    for (final key in candidates) {
-      final value = item[key];
-      if (value != null && '$value'.isNotEmpty) return '$value';
-    }
-    return '';
+    final entity = '${item['entity_type'] ?? ''}';
+    final entityId = '${item['entity_id'] ?? ''}';
+    final reference = '${item['reference_id'] ?? ''}';
+    final amountCents = item['amount_cents'];
+    final status = '${item['status'] ?? item['lipila_status'] ?? ''}';
+    final time = '${item['created_at'] ?? ''}';
+    final parts = <String>[
+      if (entity.isNotEmpty) entity + (entityId.isNotEmpty ? ' #$entityId' : ''),
+      if (reference.isNotEmpty) reference,
+      if (amountCents is num) 'K ${(amountCents / 100).toStringAsFixed(2)}',
+      if (status.isNotEmpty) status,
+      if (time.isNotEmpty) time,
+    ];
+    return parts.join('  ·  ');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Push Notifications')),
+      appBar: AppBar(title: const Text('Activity & Alerts')),
       body: RefreshIndicator(
         onRefresh: _load,
         child: SingleChildScrollView(
@@ -104,81 +91,32 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Compose Message',
+                'Backend Activity',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.brandDark),
               ),
-              const SizedBox(height: 16),
-              SoftCard(
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: ['all', 'customers', 'riders'].map((t) {
-                          final isSelected = _target == t;
-                          return Expanded(
-                            child: GestureDetector(
-                              onTap: () => setState(() => _target = t),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? AppColors.white : Colors.transparent,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    t[0].toUpperCase() + t.substring(1),
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: isSelected ? AppColors.brandDark : AppColors.brandMuted,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SoftInput(
-                      label: 'Title',
-                      controller: _titleController,
-                      hint: 'e.g. Weekend Special',
-                      icon: const Icon(Icons.title, size: 20, color: AppColors.brandMuted),
-                    ),
-                    SoftInput(
-                      label: 'Message Body',
-                      controller: _bodyController,
-                      hint: 'Type your alert message here...',
-                      maxLines: 4,
-                      icon: const Icon(Icons.message, size: 20, color: AppColors.brandMuted),
-                    ),
-                    SoftButton(
-                      title: 'Send Notification',
-                      variant: SoftButtonVariant.primary,
-                      icon: const Icon(Icons.send, size: 20, color: AppColors.brandDark),
-                      onPressed: _handleSend,
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Broadcasts are handled server-side; this screen only shows backend activity.',
-                      style: TextStyle(color: AppColors.brandMuted, fontSize: 11),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 4),
               const Text(
-                'Recent Activity',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                'Audit and mobile-money events written by the server as it happens.',
+                style: TextStyle(color: AppColors.brandMuted, fontSize: 13),
               ),
               const SizedBox(height: 16),
-              if (_loading)
+              if (_error != null)
+                SoftCard(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.cloud_off, color: AppColors.error, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: const TextStyle(color: AppColors.brandDark, fontSize: 13),
+                        ),
+                      ),
+                      TextButton(onPressed: _load, child: const Text('Retry')),
+                    ],
+                  ),
+                )
+              else if (_loading)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 24),
                   child: Center(child: CircularProgressIndicator()),
@@ -199,13 +137,19 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandMuted, fontSize: 10, letterSpacing: 1)),
+        Text(title,
+            style: const TextStyle(
+                fontWeight: FontWeight.bold,
+                color: AppColors.brandMuted,
+                fontSize: 10,
+                letterSpacing: 1)),
         const SizedBox(height: 12),
         if (items.isEmpty)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
             child: Center(
-              child: Text('Nothing recorded yet.', style: TextStyle(color: AppColors.brandMuted, fontSize: 12)),
+              child: Text('Nothing recorded yet.',
+                  style: TextStyle(color: AppColors.brandMuted, fontSize: 12)),
             ),
           )
         else
@@ -230,9 +174,15 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(_logTitle(item), style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark, fontSize: 13)),
+                            Text(_logTitle(item),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.brandDark,
+                                    fontSize: 13)),
                             if (_logDetail(item).isNotEmpty)
-                              Text(_logDetail(item), style: const TextStyle(color: AppColors.brandMuted, fontSize: 11)),
+                              Text(_logDetail(item),
+                                  style: const TextStyle(
+                                      color: AppColors.brandMuted, fontSize: 11)),
                           ],
                         ),
                       ),

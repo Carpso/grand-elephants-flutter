@@ -40,12 +40,17 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkOnboarding() async {
+    final auth = context.read<AuthProvider>();
+    try {
+      await auth.ready.timeout(const Duration(seconds: 4));
+    } catch (_) {
+      debugPrint('Session restore timed out; continuing with cached state');
+    }
     await Future.delayed(const Duration(milliseconds: 2500));
     if (!mounted) return;
     final hasOnboarded =
         await StorageService.get<bool>('hasOnboarded');
     if (!mounted) return;
-    final auth = context.read<AuthProvider>();
     if (auth.isLoggedIn) {
       Navigator.of(context).pushReplacementNamed('/home');
       return;

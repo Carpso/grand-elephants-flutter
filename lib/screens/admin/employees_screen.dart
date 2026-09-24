@@ -16,6 +16,7 @@ class EmployeesScreen extends StatefulWidget {
 class _EmployeesScreenState extends State<EmployeesScreen> {
   String _activeTab = 'team';
   bool _loadingLogs = false;
+  String? _logsError;
   List<Map<String, dynamic>> _auditLogs = [];
 
   @override
@@ -30,7 +31,10 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
   }
 
   Future<void> _loadAuditLogs() async {
-    setState(() => _loadingLogs = true);
+    setState(() {
+      _loadingLogs = true;
+      _logsError = null;
+    });
     try {
       final res = await ApiClient.instance.get('/api/admin/actions');
       if (mounted) {
@@ -41,7 +45,12 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _auditLogs = []);
+      if (mounted) {
+        setState(() {
+          _auditLogs = [];
+          _logsError = '$e'.replaceFirst('Exception: ', '');
+        });
+      }
     } finally {
       if (mounted) setState(() => _loadingLogs = false);
     }
@@ -118,7 +127,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     final requests = admin.riderApplications;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Team Management')),
+      appBar: AppBar(title: const Text('Team & Riders')),
       body: Column(
         children: [
           Padding(
@@ -126,7 +135,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
             child: Row(
               children: [
                 Expanded(
-                  child: _buildTab('team', 'Active Team'),
+                  child: _buildTab('team', 'Riders'),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
@@ -251,6 +260,11 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                               rider.vehicle.isNotEmpty ? rider.vehicle : rider.phone,
                               style: const TextStyle(color: AppColors.brandMuted, fontSize: 12),
                             ),
+                            if (rider.businessName.isNotEmpty)
+                              Text(
+                                rider.businessName,
+                                style: const TextStyle(color: AppColors.brandMuted, fontSize: 11),
+                              ),
                           ],
                         ),
                       ),
@@ -261,7 +275,7 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          'Active',
+                          rider.status.toUpperCase(),
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green[700]),
                         ),
                       ),
@@ -406,6 +420,26 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
     if (_loadingLogs) {
       return const Center(child: CircularProgressIndicator());
     }
+    if (_logsError != null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.cloud_off, size: 64, color: AppColors.brandMuted),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                _logsError!,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: AppColors.brandMuted, fontWeight: FontWeight.bold),
+              ),
+            ),
+            TextButton(onPressed: _loadAuditLogs, child: const Text('Retry')),
+          ],
+        ),
+      );
+    }
     if (_auditLogs.isEmpty) {
       return Center(
         child: Column(
@@ -424,8 +458,15 @@ class _EmployeesScreenState extends State<EmployeesScreen> {
       itemCount: _auditLogs.length,
       itemBuilder: (context, index) {
         final log = _auditLogs[index];
-        final title = log['action'] ?? log['type'] ?? log['description'] ?? 'Admin action';
-        final subtitle = log['time'] ?? log['createdAt'] ?? log['email'] ?? '';
+        final rawAction = '${log['action'] ?? ''}';
+        final title = rawAction.isEmpty ? 'Admin action' : rawAction.replaceAll('_', ' ');
+        final entity = '${log['entity_type'] ?? ''}';
+        final entityId = '${log['entity_id'] ?? ''}';
+        final time = '${log['created_at'] ?? ''}';
+        final subtitle = [
+          if (entity.isNotEmpty) entity + (entityId.isNotEmpty ? ' #$entityId' : ''),
+          if (time.isNotEmpty) time,
+        ].join('  ·  ');
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: SoftCard(

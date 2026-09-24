@@ -16,43 +16,84 @@ class AdminCollectionNumbersScreen extends StatefulWidget {
 class _AdminCollectionNumbersScreenState
     extends State<AdminCollectionNumbersScreen> {
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.read<CollectionNumberProvider>().load();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Business Collection Numbers'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => context.read<CollectionNumberProvider>().load(),
+          ),
+        ],
       ),
       body: Consumer<CollectionNumberProvider>(
         builder: (context, provider, _) {
-          if (provider.isLoading) {
+          if (provider.isLoading && provider.numbers.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
 
           if (provider.numbers.isEmpty) {
-            return const Center(
-              child: Text(
-                'No collection numbers configured by superadmin',
-                style: TextStyle(color: AppColors.brandMuted),
+            final error = provider.error;
+            return RefreshIndicator(
+              onRefresh: () => provider.load(),
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                children: [
+                  const SizedBox(height: 140),
+                  const Icon(Icons.phone_android,
+                      size: 56, color: AppColors.brandMuted),
+                  const SizedBox(height: 12),
+                  Text(
+                    error ?? 'No collection numbers configured by superadmin',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppColors.brandMuted),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 12),
+                    Center(
+                      child: TextButton(
+                        onPressed: () => provider.load(),
+                        child: const Text('Retry',
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             );
           }
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              const Padding(
-                padding: EdgeInsets.only(bottom: 16),
-                child: Text(
-                  'Business Collection Numbers',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.brandDark,
+          return RefreshIndicator(
+            onRefresh: () => provider.load(),
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    'Business Collection Numbers',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.brandDark,
+                    ),
                   ),
                 ),
-              ),
-              ...provider.numbers.map((number) =>
-                  _buildNumberCard(context, provider, number)),
-            ],
+                ...provider.numbers.map((number) =>
+                    _buildNumberCard(context, provider, number)),
+              ],
+            ),
           );
         },
       ),

@@ -1,8 +1,8 @@
 class AppConfig {
   static const String appName = 'Grand Elephants';
-  static const String appSlogan = 'Premium Marketplace & Luxury Heritage';
+  static const String appSlogan = 'Move With Conviction';
   static const String appDescription =
-      'A state-of-the-art retail platform for premium heritage products.';
+      'Premium bags marketplace — handcrafted heritage bags, carried with conviction.';
   static const String tenantDefault = 'grand-elephants-default';
 
   static const String apiBaseUrl =

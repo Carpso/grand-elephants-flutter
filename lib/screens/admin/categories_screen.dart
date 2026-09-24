@@ -70,28 +70,6 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     }
   }
 
-  void _deleteCategory(String id, String name) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Confirm Delete'),
-        content: Text('Remove "$name"? There is no server endpoint to persist deletes, so this is local-only.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              final config = context.read<ConfigProvider>();
-              config.setCategories(config.categories.where((c) => c.id != id).toList());
-              Navigator.pop(ctx);
-            },
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final config = context.watch<ConfigProvider>();
@@ -113,62 +91,29 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Manage product categories. Use the + button to add new ones.',
+              'Categories live on the storefront. Use the + button to add a new one.',
               style: TextStyle(color: AppColors.brandMuted),
             ),
             const SizedBox(height: 16),
             ...categories.map((cat) => Padding(
                   padding: const EdgeInsets.only(bottom: 16),
                   child: SoftCard(
-                    child: Column(
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Text(cat.icon, style: const TextStyle(fontSize: 24)),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Text(
-                                cat.name,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 16,
-                                  color: cat.enabled ? AppColors.brandDark : AppColors.brandMuted,
-                                ),
-                              ),
+                        Text(cat.icon, style: const TextStyle(fontSize: 24)),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Text(
+                            cat.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: AppColors.brandDark,
                             ),
-                            Switch(
-                              value: cat.enabled,
-                              onChanged: (_) {
-                                config.setCategories(categories.map((c) {
-                                  if (c.id == cat.id) {
-                                    return Category(id: c.id, name: c.name, icon: c.icon, enabled: !c.enabled);
-                                  }
-                                  return c;
-                                }).toList());
-                              },
-                              activeThumbColor: AppColors.brandPrimary,
-                              activeTrackColor: AppColors.brandPrimary,
-                            ),
-                          ],
+                          ),
                         ),
-                        const SizedBox(height: 8),
-                        const Divider(height: 1),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextButton(
-                                onPressed: () => _deleteCategory(cat.id, cat.name),
-                                style: TextButton.styleFrom(
-                                  backgroundColor: Colors.red[50],
-                                  padding: const EdgeInsets.symmetric(vertical: 8),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                ),
-                                child: const Text('Delete', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold, fontSize: 12)),
-                              ),
-                            ),
-                          ],
-                        ),
+                        const Icon(Icons.check_circle,
+                            size: 20, color: AppColors.success),
                       ],
                     ),
                   ),

@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 import 'package:grand_elephants/providers/cart_provider.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
 import 'package:grand_elephants/models/cart_item.dart';
+import 'package:grand_elephants/services/receipt_service.dart';
 
 class ReceiptScreen extends StatefulWidget {
   const ReceiptScreen({super.key});
@@ -17,7 +19,9 @@ class ReceiptScreen extends StatefulWidget {
 
 class _ReceiptScreenState extends State<ReceiptScreen> {
   Order? _order;
+  OrderReceipt? _serverReceipt;
   bool _loading = true;
+  bool _busy = false;
 
   @override
   void initState() {
@@ -35,11 +39,77 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
     } else if (cart.orders.isNotEmpty) {
       order = cart.orders.first;
     }
+
+    // Server receipt (owner/rider/business manager authorised) — powers the
+    // PDF. Falls back to local order data when the endpoint is unreachable.
+    OrderReceipt? receipt;
+    final receiptId = orderId.isNotEmpty
+        ? orderId
+        : (order?.id ?? '');
+    if (receiptId.isNotEmpty) {
+      try {
+        receipt = await ReceiptService.fetch(receiptId);
+      } catch (e) {
+        debugPrint('Receipt fetch failed: $e');
+      }
+    }
+
     if (!mounted) return;
     setState(() {
       _order = order;
+      _serverReceipt = receipt;
       _loading = false;
     });
+  }
+
+  /// Receipt used for printing: server payload when available, otherwise a
+  /// locally built one from the order the client already holds.
+  OrderReceipt? _receiptFor(Order order, ConfigProvider config) {
+    if (_serverReceipt != null) return _serverReceipt;
+    return OrderReceipt.fromOrder(
+      order,
+      businessName: order.businessName ?? '',
+      vatPct: config.taxRate,
+    );
+  }
+
+  Future<void> _print(Order order, ConfigProvider config) async {
+    final receipt = _receiptFor(order, config);
+    if (receipt == null) return;
+    setState(() => _busy = true);
+    try {
+      await ReceiptService.print(receipt);
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context).show(
+        'Could not open the print dialog. Please try again.',
+        ToastType.error,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _share(Order order, ConfigProvider config) async {
+    final receipt = _receiptFor(order, config);
+    if (receipt == null) return;
+    setState(() => _busy = true);
+    try {
+      final shared = await ReceiptService.share(receipt);
+      if (!mounted) return;
+      if (!shared) {
+        ToastProvider.of(context)
+            .show('Sharing is not available here', ToastType.info);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context).show(
+        'Could not share the receipt. Please try again.',
+        ToastType.error,
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -145,6 +215,12 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                                       order.paymentStatus == 'successful'
                                           ? 'Paid'
                                           : order.paymentStatus),
+                                  if ((_serverReceipt?.buyerTpin ?? '')
+                                      .isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    _receiptRow(
+                                        'Buyer TPIN', _serverReceipt!.buyerTpin),
+                                  ],
                                   if (order.invoiceNo == null ||
                                       order.invoiceNo!.isEmpty) ...[
                                     const SizedBox(height: 8),
@@ -287,9 +363,43 @@ class _ReceiptScreenState extends State<ReceiptScreen> {
                           ],
                         ),
                       ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SoftButton(
+                              title: _busy ? 'Working...' : 'Print / Save PDF',
+                              variant: SoftButtonVariant.primary,
+                              isLoading: _busy,
+                              icon: const Icon(
+                                Icons.print,
+                                size: 20,
+                                color: AppColors.brandDark,
+                              ),
+                              onPressed:
+                                  _busy ? null : () => _print(order, config),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: SoftButton(
+                              title: 'Share',
+                              variant: SoftButtonVariant.secondary,
+                              isLoading: _busy,
+                              icon: const Icon(
+                                Icons.share,
+                                size: 20,
+                                color: AppColors.brandPrimary,
+                              ),
+                              onPressed:
+                                  _busy ? null : () => _share(order, config),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
                       SoftButton(
                         title: 'Back to Home',
-                        variant: SoftButtonVariant.secondary,
+                        variant: SoftButtonVariant.outline,
                         onPressed: () => Navigator.pushReplacementNamed(
                             context, '/home'),
                       ),

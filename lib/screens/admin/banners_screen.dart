@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
-import 'package:grand_elephants/providers/config_provider.dart';
 import 'package:grand_elephants/services/api_client.dart';
-import 'package:grand_elephants/widgets/soft_button.dart';
+import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
-import 'package:grand_elephants/widgets/toast.dart';
 
 class BannersScreen extends StatefulWidget {
   const BannersScreen({super.key});
@@ -15,197 +12,141 @@ class BannersScreen extends StatefulWidget {
 }
 
 class _BannersScreenState extends State<BannersScreen> {
-  final _titleController = TextEditingController();
-  final _subtitleController = TextEditingController();
-  final _imageController = TextEditingController();
-  bool _saving = false;
+  List<Map<String, dynamic>> _banners = [];
+  bool _loading = false;
+  String? _error;
 
   @override
-  void dispose() {
-    _titleController.dispose();
-    _subtitleController.dispose();
-    _imageController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  Future<void> _handleCreate() async {
-    if (_titleController.text.isEmpty || _subtitleController.text.isEmpty) {
-      ToastProvider.of(context).show('Please fill in Title and Subtitle', ToastType.error);
-      return;
-    }
-    setState(() => _saving = true);
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
-      await ApiClient.instance.patch('/api/admin/settings', body: {
-        'banner_title': _titleController.text,
-        'banner_subtitle': _subtitleController.text,
-        'banner_image': _imageController.text,
-      });
+      final res = await ApiClient.instance.get('/api/config', withAuth: false);
       if (!mounted) return;
-      _titleController.clear();
-      _subtitleController.clear();
-      _imageController.clear();
-      ToastProvider.of(context).show('Banner settings saved. Reload the app to refresh the carousel.', ToastType.success);
+      setState(() {
+        _banners = ((res as Map<String, dynamic>)['banners'] as List? ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+        _loading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
-      }
-    } finally {
-      if (mounted) setState(() => _saving = false);
+      if (!mounted) return;
+      setState(() {
+        _banners = [];
+        _error = '$e'.replaceFirst('Exception: ', '');
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final config = context.watch<ConfigProvider>();
-    final banners = config.homeBanners;
-
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Banner Management'),
+        title: const Text('Home Banners'),
         backgroundColor: const Color(0xFFF59E0B),
         foregroundColor: AppColors.white,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Home Screen Banners',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.brandDark),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Banners below are loaded from /api/config. There is no banner write endpoint, so "Add Banner" persists the latest banner fields via /api/admin/settings.',
-              style: TextStyle(color: AppColors.brandMuted),
-            ),
-            const SizedBox(height: 24),
-            SoftCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: _loading && _banners.isEmpty
+            ? const Center(child: CircularProgressIndicator())
+            : ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24),
                 children: [
                   const Text(
-                    'Add New Banner',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandPrimary),
+                    'Live Home Banners',
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: AppColors.brandDark),
                   ),
-                  const SizedBox(height: 16),
-                  const Text('Title', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.brandSecondary)),
-                  const SizedBox(height: 8),
-                  _buildInputField(_titleController, 'e.g. Winter Sale'),
-                  const SizedBox(height: 12),
-                  const Text('Subtitle', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.brandSecondary)),
-                  const SizedBox(height: 8),
-                  _buildInputField(_subtitleController, 'e.g. 50% Off Everything'),
-                  const SizedBox(height: 12),
-                  const Text('Image URL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.brandSecondary)),
-                  const SizedBox(height: 8),
-                  _buildInputField(_imageController, 'https://...'),
-                  const SizedBox(height: 16),
-                  const Text('PREVIEW', style: TextStyle(color: AppColors.brandMuted, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      height: 160,
-                      decoration: BoxDecoration(borderRadius: BorderRadius.circular(16)),
-                      child: Stack(
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Served to every shopper from the storefront carousel.',
+                    style: TextStyle(color: AppColors.brandMuted),
+                  ),
+                  const SizedBox(height: 24),
+                  if (_error != null) ...[
+                    SoftCard(
+                      child: Row(
                         children: [
-                          if (_imageController.text.isNotEmpty)
-                            Image.network(_imageController.text, width: double.infinity, height: 160, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[200]))
-                          else
-                            Container(width: double.infinity, height: 160, color: Colors.grey[200]),
-                          Container(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            child: Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    _titleController.text.isEmpty ? 'Title' : _titleController.text,
-                                    style: const TextStyle(color: AppColors.white, fontSize: 22, fontWeight: FontWeight.bold),
-                                  ),
-                                  Text(
-                                    _subtitleController.text.isEmpty ? 'Subtitle' : _subtitleController.text,
-                                    style: const TextStyle(color: AppColors.white, fontSize: 16),
-                                  ),
-                                ],
-                              ),
+                          const Icon(Icons.cloud_off, color: AppColors.error, size: 20),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: const TextStyle(color: AppColors.brandDark, fontSize: 13),
                             ),
                           ),
+                          TextButton(onPressed: _load, child: const Text('Retry')),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  SoftButton(
-                    title: _saving ? 'Saving...' : 'Add Banner',
-                    variant: SoftButtonVariant.primary,
-                    isLoading: _saving,
-                    onPressed: _saving ? null : _handleCreate,
-                  ),
+                  ] else if (_banners.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Center(
+                        child: Text(
+                          'No banners on the storefront right now',
+                          style: TextStyle(color: AppColors.brandMuted),
+                        ),
+                      ),
+                    )
+                  else
+                    ..._banners.map((banner) => Padding(
+                          padding: const EdgeInsets.only(bottom: 16),
+                          child: SoftCard(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: SizedBox(
+                                    width: 72,
+                                    height: 72,
+                                    child: ProductImage(
+                                      src: '${banner['image'] ?? ''}',
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        '${banner['title'] ?? ''}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                                      ),
+                                      Text(
+                                        '${banner['subtitle'] ?? ''}',
+                                        style: const TextStyle(
+                                            color: AppColors.brandMuted, fontSize: 13),
+                                      ),
+                                      if ('${banner['link'] ?? ''}'.isNotEmpty)
+                                        Text(
+                                          '${banner['link']}',
+                                          style: const TextStyle(
+                                              color: AppColors.brandPrimary, fontSize: 12),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Active Banners (${banners.length})',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandDark),
-            ),
-            const SizedBox(height: 12),
-            ...banners.map((banner) => Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: SoftCard(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            banner['image'] as String? ?? '',
-                            width: 64,
-                            height: 64,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(width: 64, height: 64, color: Colors.grey[200]),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(banner['title'] as String? ?? '', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark)),
-                              Text(banner['subtitle'] as String? ?? '', style: const TextStyle(color: AppColors.brandMuted, fontSize: 13)),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete, color: AppColors.error, size: 20),
-                          onPressed: () {
-                            config.removeBanner(banner['id'] as String);
-                            ToastProvider.of(context).show('Banner removed (local only)', ToastType.info);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                )),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInputField(TextEditingController controller, String hint) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: Colors.grey[50],
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey[200]!),
-      ),
-      child: TextField(
-        controller: controller,
-        decoration: InputDecoration(border: InputBorder.none, hintText: hint, hintStyle: const TextStyle(color: AppColors.brandMuted)),
       ),
     );
   }

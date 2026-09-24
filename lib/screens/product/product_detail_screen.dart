@@ -109,6 +109,61 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
     ToastProvider.of(context).show('Added to Cart!', ToastType.success);
   }
 
+  static const List<String> _wearableCategories = [
+    'apparel',
+    'clothing',
+    'fashion',
+    'jewelry',
+    'jewellery',
+    'accessories',
+    'eyewear',
+    'watches',
+    'shoes',
+  ];
+
+  /// Every product in Grand Elephants is a bag, so all bag-ish categories
+  /// must expose the try-on entry point even if they are not "wearable".
+  static const List<String> _bagCategories = [
+    'bag',
+    'bags',
+    'tote',
+    'backpack',
+    'handbag',
+    'purse',
+    'clutch',
+    'luggage',
+    'travel',
+    'crossbody',
+  ];
+
+  static const List<String> _knownNonWearableCategories = [
+    'electronics',
+    'grocery',
+    'groceries',
+    'food',
+    'furniture',
+    'kitchen',
+    'books',
+    'toys',
+    'automotive',
+    'appliances',
+    'hardware',
+  ];
+
+  /// The Virtual Try-On entry point is shown for wearable categories, for
+  /// products without a (known) category, and for anything the app does not
+  /// recognise yet — only clearly non-wearable categories hide it.
+  bool _isTryOnEligible(Product product) {
+    final category = product.category.trim().toLowerCase();
+    if (category.isEmpty) return true;
+    if (_wearableCategories.any((key) => category.contains(key))) return true;
+    if (_bagCategories.any((key) => category.contains(key))) return true;
+    if (_knownNonWearableCategories.any((key) => category.contains(key))) {
+      return false;
+    }
+    return true;
+  }
+
   void _handleAddReview() async {
     if (_reviewController.text.trim().isEmpty) {
       ToastProvider.of(context).show('Please write a comment', ToastType.error);
@@ -262,15 +317,37 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                         ),
                       ],
                     ),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Expanded(
-                          child: SoftButton(
-                            title: 'Add to Cart',
-                            variant: SoftButtonVariant.primary,
-                            onPressed: _handleAddToCart,
-                          ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: SoftButton(
+                                title: 'Add to Cart',
+                                variant: SoftButtonVariant.primary,
+                                onPressed: _handleAddToCart,
+                              ),
+                            ),
+                          ],
                         ),
+                        if (_isTryOnEligible(product)) ...[
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: SoftButton(
+                              title: 'Virtual Try-On',
+                              variant: SoftButtonVariant.outline,
+                              icon: const Icon(
+                                Icons.style,
+                                size: 20,
+                                color: AppColors.brandDark,
+                              ),
+                              onPressed: () => Navigator.of(context)
+                                  .pushNamed('/try-on', arguments: product),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

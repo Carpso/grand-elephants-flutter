@@ -6,6 +6,7 @@ import 'package:grand_elephants/providers/cart_provider.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
+import 'package:grand_elephants/widgets/soft_input.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 
 enum _PaymentMethod { momo, card }
@@ -21,17 +22,38 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _addressController = TextEditingController(text: 'Kabulonga, Lusaka');
   final _phoneController = TextEditingController();
   final _distanceController = TextEditingController(text: '3');
+  final _tpinController = TextEditingController();
 
   _PaymentMethod _paymentMethod = _PaymentMethod.momo;
   bool _needTaxInvoice = false;
   bool _isProcessing = false;
+  String? _tpinError;
 
   @override
   void dispose() {
     _addressController.dispose();
     _phoneController.dispose();
     _distanceController.dispose();
+    _tpinController.dispose();
     super.dispose();
+  }
+
+  /// Normalises the buyer TPIN: strips spaces/hyphens, returns `null` when
+  /// left blank (the field is optional) and throws nothing — the caller gets
+  /// a 10-digit string or an inline error.
+  String? _normalizedTpin() {
+    final value = _tpinController.text.replaceAll(RegExp(r'[\s-]'), '');
+    if (value.isEmpty) return null;
+    if (!RegExp(r'^\d{10}$').hasMatch(value)) return '';
+    return value;
+  }
+
+  void _onTpinChanged(String value) {
+    if (_tpinError == null) return;
+    final normalized = value.replaceAll(RegExp(r'[\s-]'), '');
+    if (normalized.isEmpty || RegExp(r'^\d{10}$').hasMatch(normalized)) {
+      setState(() => _tpinError = null);
+    }
   }
 
   Future<void> _handlePayment() async {
@@ -41,6 +63,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       ToastProvider.of(context).show('Your cart is empty!', ToastType.error);
       return;
     }
+
+    final tpin = _normalizedTpin();
+    if (tpin != null && tpin.isEmpty) {
+      setState(() => _tpinError = 'TPIN must be exactly 10 digits');
+      return;
+    }
+    if (_tpinError != null) setState(() => _tpinError = null);
 
     final distanceKm = double.tryParse(_distanceController.text) ?? 0;
 
@@ -53,6 +82,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         deliveryMethod: 'standard',
         deliveryKm: distanceKm,
         customerPhone: _phoneController.text.trim(),
+        tpin: tpin,
       );
 
       if (!mounted) return;
@@ -250,6 +280,40 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 Text(
                   'Final total incl. 16% VAT and payment fees is quoted on the order.',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
+              ],
+            ),
+          ),
+          SoftCard(
+            margin: const EdgeInsets.only(bottom: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Buyer TPIN (ZRA)',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: AppColors.brandDark,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Optional — printed on your tax invoice and receipt.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
+                const SizedBox(height: 12),
+                SoftInput(
+                  label: 'TPIN',
+                  hint: 'e.g. 1000000000 — optional, appears on your receipt',
+                  controller: _tpinController,
+                  error: _tpinError,
+                  onChanged: _onTpinChanged,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(r'[0-9\s-]')),
+                    LengthLimitingTextInputFormatter(14),
+                  ],
                 ),
               ],
             ),

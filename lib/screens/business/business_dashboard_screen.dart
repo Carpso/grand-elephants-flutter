@@ -20,6 +20,7 @@ class BusinessDashboardScreen extends StatefulWidget {
 
 class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
   bool _loading = true;
+  String? _error;
   Map<String, dynamic> _business = const {};
   List<Order> _orders = [];
 
@@ -29,7 +30,11 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
     _load();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({bool showErrors = false}) async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final results = await Future.wait([
         ApiClient.instance.get('/api/businesses/me'),
@@ -41,9 +46,15 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           .map((e) => Order.fromJson(e as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('Business dashboard load failed: $e');
+      final message =
+          '$e'.replaceFirst('Exception: ', '').replaceFirst('ApiException: ', '');
+      if (mounted) _error = message;
+      if (showErrors && mounted) {
+        ToastProvider.of(context).show(message, ToastType.error);
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-    if (mounted) setState(() => _loading = false);
   }
 
   double get _sales => _orders.fold(0.0, (sum, o) => sum + o.total);
@@ -113,6 +124,31 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               children: [
                 const SizedBox(height: 32),
+                if (_error != null) ...[
+                  SoftCard(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.cloud_off,
+                            size: 36, color: AppColors.brandMuted),
+                        const SizedBox(height: 8),
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                              fontSize: 13, color: AppColors.brandMuted),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () => _load(showErrors: true),
+                          child: const Text('Retry',
+                              style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
                 const Text(
                   'Financial Overview',
                   style: TextStyle(
@@ -264,6 +300,17 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                 _buildChart(),
                 const SizedBox(height: 24),
                 SoftButton(
+                  title: 'Taxes & VAT',
+                  variant: SoftButtonVariant.primary,
+                  icon: const Icon(
+                    Icons.account_balance,
+                    size: 20,
+                    color: AppColors.brandDark,
+                  ),
+                  onPressed: () => Navigator.of(context).pushNamed('/business/tax'),
+                ),
+                const SizedBox(height: 8),
+                SoftButton(
                   title: 'Generate Full Report',
                   variant: SoftButtonVariant.outline,
                   onPressed: _loading ? null : _showReport,
@@ -273,11 +320,11 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                   title: 'Refresh',
                   variant: SoftButtonVariant.secondary,
                   onPressed: () async {
+                    final messenger = ToastProvider.of(context);
                     setState(() => _loading = true);
-                    await _load();
-                    if (!context.mounted) return;
-                    ToastProvider.of(context)
-                        .show('Dashboard refreshed', ToastType.success);
+                    await _load(showErrors: true);
+                    if (!mounted || _error != null) return;
+                    messenger.show('Dashboard refreshed', ToastType.success);
                   },
                 ),
               ],

@@ -21,25 +21,25 @@ class Slide {
 const List<Slide> slides = [
   Slide(
     id: '1',
-    title: 'Curated Heritage',
+    title: 'Heritage Bags',
     description:
-        'Discover an exclusive collection of digital luxury pieces, selected for their unparalleled craftsmanship.',
+        'Discover a curated collection of handcrafted heritage bags, selected for their craftsmanship and character.',
     image: 'assets/branding/onboarding_welcome.png',
     icon: 'security',
   ),
   Slide(
     id: '2',
-    title: 'Bespoke Quality',
+    title: 'Built To Last',
     description:
-        'Every item in our collection is verified for authenticity and crafted from the world\'s finest materials.',
+        'Every bag is verified for authenticity and crafted from the finest leathers and materials — carried with conviction.',
     image: 'assets/branding/onboarding_quality.png',
     icon: 'verified',
   ),
   Slide(
     id: '3',
-    title: 'Global Concierge',
+    title: 'Delivered To You',
     description:
-        'Experience white-glove delivery service, reaching you wherever you are in the world.',
+        'White-glove delivery across Zambia, so your new bag reaches you wherever you are.',
     image: 'assets/branding/onboarding_delivery.png',
     icon: 'public',
   ),

@@ -1,10 +1,11 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/providers/auth_provider.dart';
 import 'package:grand_elephants/services/api_client.dart';
+import 'package:grand_elephants/services/image_util.dart';
+import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_input.dart';
 import 'package:grand_elephants/widgets/toast.dart';
@@ -37,11 +38,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null && mounted) {
-      setState(() => _image = picked.path);
+    final picked = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 900,
+      imageQuality: 70,
+    );
+    if (picked == null || !mounted) return;
+    final dataUri = await imageToDataUri(picked, maxDimension: 900, quality: 70);
+    if (!mounted) return;
+    if (dataUri == null) {
+      ToastProvider.of(context)
+          .show('Could not read that image, pick another one', ToastType.error);
+      return;
     }
+    setState(() => _image = dataUri);
   }
+
+  /// Admins publish to the marketplace catalogue, shop teams publish to their
+  /// own store; both write real rows through the API.
+  bool _isAdmin() => ['admin', 'superadmin'].contains(context.read<AuthProvider>().role);
 
   Future<void> _handleCreate() async {
     if (_nameController.text.isEmpty ||
@@ -53,29 +68,39 @@ class _AddProductScreenState extends State<AddProductScreen> {
       return;
     }
 
-    final businessId = context.read<AuthProvider>().user?.businessId;
-    if (businessId == null || businessId.isEmpty) {
-      ToastProvider.of(context).show('Create a business first', ToastType.error);
+    final price = double.tryParse(_priceController.text) ?? 0;
+    if (price <= 0) {
+      ToastProvider.of(context).show('Enter a price greater than zero', ToastType.error);
       return;
     }
 
+    final isAdmin = _isAdmin();
     setState(() => _loading = true);
     try {
-      await ApiClient.instance.post('/api/businesses/me/products', body: {
-        'name': _nameController.text,
-        'price': double.tryParse(_priceController.text) ?? 0,
-        'image': _image,
-        'description': _descriptionController.text,
-        'category': _categoryController.text,
-        'stock': int.tryParse(_stockController.text) ?? 0,
-      });
+      await ApiClient.instance.post(
+        isAdmin ? '/api/admin/products' : '/api/businesses/me/products',
+        body: {
+          'name': _nameController.text,
+          'price': price,
+          'image': _image,
+          'description': _descriptionController.text,
+          'category': _categoryController.text,
+          'stock': int.tryParse(_stockController.text) ?? 0,
+        },
+      );
       if (!mounted) return;
       ToastProvider.of(context).show('Product added successfully to inventory.', ToastType.success);
       Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
-      }
+      if (!mounted) return;
+      final message =
+          '$e'.replaceFirst('Exception: ', '').replaceFirst('ApiException: ', '');
+      ToastProvider.of(context).show(
+        message.toLowerCase().contains('no business')
+            ? 'Create a business first — apply from your profile'
+            : message,
+        ToastType.error,
+      );
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -113,7 +138,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       fit: StackFit.expand,
                       children: [
                         if (_image != null)
-                          Image.file(File(_image!), fit: BoxFit.cover, errorBuilder: (_, __, ___) => Container(color: Colors.grey[200]))
+                          ProductImage(src: _image!, fit: BoxFit.cover)
                         else
                           const Center(
                             child: Column(

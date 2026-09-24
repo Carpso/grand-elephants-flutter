@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/providers/rider_provider.dart';
+import 'package:grand_elephants/services/image_util.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 
@@ -22,7 +23,6 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
   bool _isCameraReady = false;
   bool _hasPermission = false;
   bool _submitting = false;
-  final TextEditingController _notesController = TextEditingController();
 
   String get _orderId {
     if (widget.orderId != null && widget.orderId!.isNotEmpty) {
@@ -42,7 +42,6 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
-    _notesController.dispose();
     super.dispose();
   }
 
@@ -90,29 +89,39 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
 
   Future<void> _confirmDelivery() async {
     if (_submitting) return;
-    setState(() => _submitting = true);
     final orderId = _orderId;
-    final notes = _notesController.text.trim();
+    if (orderId.isEmpty) {
+      ToastProvider.of(context)
+          .show('No order selected for this delivery', ToastType.error);
+      return;
+    }
+    if (_photo == null) {
+      ToastProvider.of(context)
+          .show('Take a proof of delivery photo first', ToastType.error);
+      return;
+    }
+
+    setState(() => _submitting = true);
+    final rider = context.read<RiderProvider>();
     try {
-      if (orderId.isNotEmpty) {
-        await context.read<RiderProvider>().updateOrderStatus(orderId, 'Delivered');
+      final proof = await imageToDataUri(_photo, maxDimension: 900, quality: 70);
+      if (proof == null) {
         if (!mounted) return;
         ToastProvider.of(context)
-            .show(notes.isEmpty
-                ? 'Order $orderId marked as Delivered!'
-                : 'Order $orderId delivered: $notes',
-                ToastType.success);
-      } else {
-        if (!mounted) return;
-        ToastProvider.of(context)
-            .show('Proof of delivery captured! Order Complete.', ToastType.success);
+            .show('Could not read that photo, take it again', ToastType.error);
+        return;
       }
+      await rider.updateOrderStatus(orderId, 'Delivered', proofPhoto: proof);
       if (!mounted) return;
+      ToastProvider.of(context)
+          .show('Order $orderId marked as Delivered!', ToastType.success);
       Navigator.of(context).maybePop();
     } catch (e) {
       if (!mounted) return;
-      ToastProvider.of(context)
-          .show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      ToastProvider.of(context).show(
+        '$e'.replaceFirst('Exception: ', '').replaceFirst('ApiException: ', ''),
+        ToastType.error,
+      );
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -266,30 +275,6 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
                 fontSize: 18,
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          left: 24,
-          right: 24,
-          bottom: 140,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.55),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
-            ),
-            child: TextField(
-              controller: _notesController,
-              maxLines: 2,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                hintText: 'Add delivery notes (optional)',
-                hintStyle: TextStyle(color: Color(0xFF9CA3AF)),
-                border: InputBorder.none,
-                isDense: true,
               ),
             ),
           ),

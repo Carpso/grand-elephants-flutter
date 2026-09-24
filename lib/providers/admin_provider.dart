@@ -135,6 +135,7 @@ class AdminProvider extends ChangeNotifier {
   List<User> _users = [];
   List<AdminRider> _riders = [];
   List<AdminPayout> _payouts = [];
+  List<AdminPayout> _businessPayouts = [];
   List<Map<String, dynamic>> _riderApplications = [];
   List<Order> _orders = [];
   List<Product> _products = [];
@@ -147,6 +148,7 @@ class AdminProvider extends ChangeNotifier {
   List<User> get users => _users;
   List<AdminRider> get riders => _riders;
   List<AdminPayout> get payouts => _payouts;
+  List<AdminPayout> get businessPayouts => _businessPayouts;
   List<Map<String, dynamic>> get riderApplications => _riderApplications;
   List<Order> get orders => _orders;
   List<Product> get products => _products;
@@ -159,9 +161,11 @@ class AdminProvider extends ChangeNotifier {
     try {
       final res = await ApiClient.instance.get('/api/admin/stats');
       _stats = AdminStats.fromJson(res as Map<String, dynamic>);
+      _error = null;
       notifyListeners();
     } catch (e) {
       _error = '$e';
+      notifyListeners();
     }
   }
 
@@ -187,6 +191,20 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> loadPayouts() async {
+    try {
+      final res = await ApiClient.instance.get('/api/admin/payouts');
+      _businessPayouts = (res as List)
+          .map((e) => AdminPayout.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _error = null;
+      notifyListeners();
+    } catch (e) {
+      _error = '$e';
+      notifyListeners();
+    }
+  }
+
   Future<void> loadOrders({String? status}) async {
     try {
       final res = await ApiClient.instance
@@ -194,9 +212,11 @@ class AdminProvider extends ChangeNotifier {
       _orders = (res as List)
           .map((e) => Order.fromJson(e as Map<String, dynamic>))
           .toList();
+      _error = null;
       notifyListeners();
     } catch (e) {
       _error = '$e';
+      notifyListeners();
     }
   }
 
@@ -206,21 +226,25 @@ class AdminProvider extends ChangeNotifier {
       _users = (res as List)
           .map((e) => User.fromJson(e as Map<String, dynamic>))
           .toList();
+      _error = null;
       notifyListeners();
     } catch (e) {
       _error = '$e';
+      notifyListeners();
     }
   }
 
   Future<void> loadProducts() async {
     try {
-      final res = await ApiClient.instance.get('/api/businesses/me/products');
+      final res = await ApiClient.instance.get('/api/admin/products');
       _products = (res as List)
           .map((e) => Product.fromJson(e as Map<String, dynamic>))
           .toList();
+      _error = null;
       notifyListeners();
     } catch (e) {
       _error = '$e';
+      notifyListeners();
     }
   }
 
@@ -228,11 +252,16 @@ class AdminProvider extends ChangeNotifier {
     try {
       final res = await ApiClient.instance.get('/api/admin/lipila/balance');
       final data = res as Map<String, dynamic>;
+      if (data['ok'] == false) {
+        throw ApiException('${data['error'] ?? 'Lipila wallet unavailable'}');
+      }
       _lipilaBalance = (data['lipilaBalance'] as num?)?.toDouble() ?? 0;
       _businessWalletCents = (data['businessWalletCents'] as num?)?.toInt() ?? 0;
+      _error = null;
       notifyListeners();
     } catch (e) {
       _error = '$e';
+      notifyListeners();
     }
   }
 
@@ -267,12 +296,18 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> processPayout(String payoutId) async {
+  /// Re-checks a payout against Lipila and returns the settled status so the
+  /// caller can toast what actually happened.
+  Future<String> processPayout(String payoutId) async {
     try {
-      await ApiClient.instance.post('/api/admin/payouts/$payoutId/process', body: {});
-      await loadRiders();
+      final res =
+          await ApiClient.instance.post('/api/admin/payouts/$payoutId/process', body: {});
+      await loadPayouts();
+      await loadStats();
+      return '${(res as Map<String, dynamic>)['status'] ?? 'processing'}';
     } catch (e) {
       debugPrint('Process payout failed: $e');
+      rethrow;
     }
   }
 

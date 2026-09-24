@@ -32,10 +32,11 @@ class Category {
 }
 
 class ConfigProvider extends ChangeNotifier {
-  final String tenantId = 'sell-on-app-default';
+  final String tenantId = 'grand-elephants-default';
   String _appName = 'Grand Elephants';
-  String _appSlogan = 'Premium Marketplace & Luxury Heritage';
-  String _appDescription = 'A state-of-the-art retail platform for premium heritage products.';
+  String _appSlogan = 'Move With Conviction';
+  String _appDescription =
+      'Premium bags marketplace — handcrafted heritage bags, carried with conviction.';
   String _appLogo = '';
 
   String _currency = 'ZMW';

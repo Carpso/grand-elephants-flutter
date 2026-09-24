@@ -103,12 +103,31 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
               const SizedBox(height: 16),
               if (orders.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 32),
-                  child: Center(
-                    child: Text('No orders yet.', style: TextStyle(color: AppColors.brandMuted)),
-                  ),
-                )
+                admin.error != null
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 32),
+                        child: Center(
+                          child: Column(
+                            children: [
+                              Text(
+                                '${admin.error}'.replaceFirst('Exception: ', ''),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: AppColors.brandMuted),
+                              ),
+                              TextButton(
+                                onPressed: () => admin.loadOrders(),
+                                child: const Text('Retry'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 32),
+                        child: Center(
+                          child: Text('No orders yet.', style: TextStyle(color: AppColors.brandMuted)),
+                        ),
+                      )
               else
                 ...orders.map((o) => Padding(
                       padding: const EdgeInsets.only(bottom: 16),

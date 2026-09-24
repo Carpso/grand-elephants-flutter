@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/services/api_client.dart';
 import 'package:grand_elephants/widgets/back_button.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
@@ -45,15 +46,24 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       await config.updateAppIdentity(
         _nameController.text,
         _sloganController.text,
-        'Premium Marketplace',
+        config.appDescription,
         _logoController.text,
       );
-      if (mounted) {
+      // Confirm the server actually persisted it before claiming success.
+      final res = await ApiClient.instance.get('/api/config', withAuth: false);
+      final slogan =
+          '${(res as Map<String, dynamic>)['appSlogan'] ?? ''}';
+      if (!mounted) return;
+      if (slogan == _sloganController.text) {
         ToastProvider.of(context).show('Branding updated successfully!', ToastType.success);
+      } else {
+        ToastProvider.of(context).show(
+            'Branding was not saved on the server, please try again', ToastType.error);
       }
     } catch (e) {
       if (mounted) {
-        ToastProvider.of(context).show('Failed to update branding', ToastType.error);
+        ToastProvider.of(context).show(
+            '$e'.replaceFirst('Exception: ', ''), ToastType.error);
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -113,7 +123,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   SoftInput(
                     label: 'App Slogan',
                     controller: _sloganController,
-                    hint: 'Premium Marketplace',
+                    hint: 'e.g. Move With Conviction',
                   ),
                   if (_logoController.text.isNotEmpty) ...[
                     Center(

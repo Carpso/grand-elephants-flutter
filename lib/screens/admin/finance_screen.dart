@@ -25,11 +25,36 @@ class _FinanceScreenState extends State<FinanceScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final admin = context.read<AdminProvider>();
-      admin.loadStats();
-      admin.loadRiders();
-    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  Future<void> _load() async {
+    final admin = context.read<AdminProvider>();
+    await Future.wait([
+      admin.loadStats(),
+      admin.loadRiders(),
+      admin.loadLipilaBalance(),
+      admin.loadPayouts(),
+    ]);
+  }
+
+  Future<void> _handleProcessPayout(AdminPayout payout) async {
+    final messenger = ToastProvider.of(context);
+    try {
+      final status = await context.read<AdminProvider>().processPayout(payout.id);
+      if (!mounted) return;
+      if (status == 'successful') {
+        messenger.show('Payout ${payout.id} settled successfully.', ToastType.success);
+      } else if (status == 'failed') {
+        messenger.show(
+            payout.error ?? 'Payout ${payout.id} failed at Lipila', ToastType.error);
+      } else {
+        messenger.show('Payout ${payout.id} is now $status.', ToastType.info);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      messenger.show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+    }
   }
 
   @override
@@ -80,20 +105,40 @@ class _FinanceScreenState extends State<FinanceScreen> {
     final admin = context.watch<AdminProvider>();
     final stats = admin.stats;
     final payouts = admin.payouts;
+    final businessPayouts = admin.businessPayouts;
+    final lipilaBalance = admin.lipilaBalance ?? 0;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Finance & Rates')),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await admin.loadStats();
-          await admin.loadRiders();
-        },
+        onRefresh: _load,
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (admin.error != null) ...[
+                SoftCard(
+                  child: Row(
+                    children: [
+                      const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          '${admin.error}'.replaceFirst('Exception: ', ''),
+                          style: const TextStyle(color: AppColors.brandDark, fontSize: 12),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _load,
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
               const Text(
                 'Overview',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.brandDark),
@@ -112,6 +157,20 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   Expanded(child: _buildStatTile(Icons.percent, _formatCents(stats.platformCommissionCents), 'PLATFORM COMMISSION')),
                   const SizedBox(width: 8),
                   Expanded(child: _buildStatTile(Icons.pending_actions, '${stats.pendingPayouts}', 'PENDING PAYOUTS')),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildStatTile(
+                        Icons.savings, 'K ${lipilaBalance.toStringAsFixed(2)}', 'LIPILA WALLET'),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildStatTile(
+                        Icons.sync, '${businessPayouts.length}', 'BUSINESS PAYOUTS'),
+                  ),
                 ],
               ),
               const SizedBox(height: 24),
@@ -172,6 +231,88 @@ class _FinanceScreenState extends State<FinanceScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 24),
+              const Text(
+                'Business Payouts',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.brandDark),
+              ),
+              const SizedBox(height: 8),
+              if (businessPayouts.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 24),
+                  child: Center(
+                    child: Text('No business payouts yet.', style: TextStyle(color: AppColors.brandMuted)),
+                  ),
+                )
+              else
+                ...businessPayouts.map((p) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: SoftCard(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: const BoxDecoration(
+                                color: AppColors.softSurface,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(Icons.store, size: 20, color: AppColors.brandPrimary),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    p.businessName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.brandDark,
+                                        fontSize: 13),
+                                  ),
+                                  Text(
+                                    '${p.network.toUpperCase()} ${p.phone} · ${p.createdAt}',
+                                    style:
+                                        const TextStyle(color: AppColors.brandMuted, fontSize: 12),
+                                  ),
+                                  Text(
+                                    p.status.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: p.status == 'successful'
+                                          ? AppColors.success
+                                          : p.status == 'failed'
+                                              ? AppColors.error
+                                              : AppColors.brandMuted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  _formatCents(p.netCents),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold, color: AppColors.brandDark),
+                                ),
+                                const SizedBox(height: 6),
+                                if (p.status != 'successful')
+                                  SoftButton(
+                                    title: 'Check status',
+                                    variant: SoftButtonVariant.primary,
+                                    onPressed: () => _handleProcessPayout(p),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    )),
               const SizedBox(height: 24),
               const Text(
                 'Rider Payouts',
