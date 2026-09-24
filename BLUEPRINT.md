@@ -1,4 +1,4 @@
-# Grand Elephants / Sell On App — Flutter App Blueprint
+# Grand Elephants — Flutter App Blueprint
 
 Premium marketplace & luxury heritage storefront. Multi-role: customers, riders,
 businesses, employees, admins and superadmins share one app with role-based tabs

@@ -52,6 +52,20 @@ Base URL: `https://grand-elephants-api.godfreymoseskalambo.workers.dev`
 `ApiClient` auto-attaches `Authorization: Bearer <token>` (from
 `flutter_secure_storage`). Public catalog calls pass `withAuth: false`.
 
+## Branding & platform (do not regress)
+
+- Product name is **Grand Elephants** everywhere: `AppConfig.appName`,
+  `MaterialApp.title`, web `<title>`/`manifest.json`, Android label, SMS brand
+  prefix (`GRANDELEPHANTS:`). The old `sell_on_app` / "Sell On App" naming is
+  retired — never reintroduce it (the Dart package is `grand_elephants`).
+- Logo asset: `assets/images/grandelephants_icon.jpg` (used by `lib/widgets/logo.dart`).
+- Android: applicationId/namespace `com.grandelephants.shop`; MainActivity lives
+  at `android/app/src/main/kotlin/com/grandelephants/shop/MainActivity.kt`.
+- Firebase FCM is wired: `firebase_core` + `firebase_messaging`, the device
+  token is sent with `verifyOtp` so the worker can push notifications.
+- SMS is sent server-side only (Africa's Talking, production) — the app never
+  sends SMS itself.
+
 ## Repository layout
 
 - `lib/main.dart` — provider wiring, routes, admin role guards
