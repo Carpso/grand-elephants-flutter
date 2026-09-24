@@ -1,5 +1,5 @@
 class AppConfig {
-  static const String appName = 'Sell On App';
+  static const String appName = 'Grand Elephants';
   static const String appSlogan = 'Premium Marketplace & Luxury Heritage';
   static const String appDescription =
       'A state-of-the-art retail platform for premium heritage products.';

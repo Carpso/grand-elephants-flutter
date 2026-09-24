@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/services/api_client.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/services/api_client.dart';
 
 class SystemHealthModal extends StatefulWidget {
   final bool visible;

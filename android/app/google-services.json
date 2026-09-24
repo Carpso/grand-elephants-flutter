@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "964464189303",
+    "project_id": "grand-elephants-b8ec4",
+    "storage_bucket": "grand-elephants-b8ec4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:964464189303:android:f5c68957ebe643cca7cb72",
+        "android_client_info": {
+          "package_name": "com.grandelephants.shop"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBDgu68Qa47gaORIOZTe-tRSYX91RD48SA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import '../models/user.dart';
 import '../services/api_client.dart';
@@ -80,10 +81,22 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Verifies the OTP and stores the session. Returns the fresh user.
+  Future<String?> _getFcmToken() async {
+    try {
+      final messaging = FirebaseMessaging.instance;
+      await messaging.requestPermission();
+      return await messaging.getToken();
+    } catch (e) {
+      debugPrint('FCM token unavailable: $e');
+      return null;
+    }
+  }
+
   Future<User> verifyOtp(String phone, String code, {String? name, String? email}) async {
     _isLoading = true;
     notifyListeners();
     try {
+      final fcmToken = await _getFcmToken();
       final res = await ApiClient.instance.post(
         '/api/auth/verify-otp',
         body: {
@@ -91,6 +104,7 @@ class AuthProvider extends ChangeNotifier {
           'code': code,
           if (name != null && name.isNotEmpty) 'name': name,
           if (email != null && email.isNotEmpty) 'email': email,
+          if (fcmToken != null && fcmToken.isNotEmpty) 'fcmToken': fcmToken,
         },
         withAuth: false,
       );

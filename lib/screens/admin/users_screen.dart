@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/models/user.dart';
-import 'package:sell_on_app/providers/admin_provider.dart';
-import 'package:sell_on_app/widgets/soft_card.dart';
-import 'package:sell_on_app/widgets/toast.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/models/user.dart';
+import 'package:grand_elephants/providers/admin_provider.dart';
+import 'package:grand_elephants/widgets/soft_card.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 
 class UsersScreen extends StatefulWidget {
   const UsersScreen({super.key});

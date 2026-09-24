@@ -1,9 +1,9 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/widgets/soft_button.dart';
-import 'package:sell_on_app/widgets/soft_card.dart';
-import 'package:sell_on_app/widgets/toast.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/widgets/soft_button.dart';
+import 'package:grand_elephants/widgets/soft_card.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});

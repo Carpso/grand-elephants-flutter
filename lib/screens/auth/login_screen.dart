@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/providers/auth_provider.dart';
-import 'package:sell_on_app/providers/config_provider.dart';
-import 'package:sell_on_app/utils/spring_curve.dart';
-import 'package:sell_on_app/widgets/logo.dart';
-import 'package:sell_on_app/widgets/soft_button.dart';
-import 'package:sell_on_app/widgets/soft_input.dart';
-import 'package:sell_on_app/widgets/toast.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/providers/auth_provider.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/utils/spring_curve.dart';
+import 'package:grand_elephants/widgets/logo.dart';
+import 'package:grand_elephants/widgets/soft_button.dart';
+import 'package:grand_elephants/widgets/soft_input.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

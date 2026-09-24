@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/models/cart_item.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/models/cart_item.dart';
 
 class IncomingOrderModal extends StatefulWidget {
   final bool visible;

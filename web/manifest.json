@@ -1,11 +1,11 @@
 {
-    "name": "sell_on_app",
-    "short_name": "sell_on_app",
+    "name": "Grand Elephants",
+    "short_name": "Grand Elephants",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Grand Elephants - Premium Marketplace & Luxury Heritage. A state-of-the-art retail platform for premium heritage products.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

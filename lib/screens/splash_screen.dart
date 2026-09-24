@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/providers/auth_provider.dart';
-import 'package:sell_on_app/providers/config_provider.dart';
-import 'package:sell_on_app/services/storage_service.dart';
-import 'package:sell_on_app/widgets/logo.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/providers/auth_provider.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/services/storage_service.dart';
+import 'package:grand_elephants/widgets/logo.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -67,9 +67,9 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     final config = context.read<ConfigProvider>();
     final appNameParts = config.appName.split(' ');
-    final firstName = appNameParts.isNotEmpty ? appNameParts.first : 'Sell';
+    final firstName = appNameParts.isNotEmpty ? appNameParts.first : 'Grand';
     final lastName =
-        appNameParts.length > 1 ? appNameParts.sublist(1).join(' ') : 'On App';
+        appNameParts.length > 1 ? appNameParts.sublist(1).join(' ') : 'Elephants';
 
     return Scaffold(
       backgroundColor: AppColors.brandDark,

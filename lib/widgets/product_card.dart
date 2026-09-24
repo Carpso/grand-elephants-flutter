@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/models/product.dart';
-import 'package:sell_on_app/utils/spring_curve.dart';
-import 'package:sell_on_app/widgets/price_tag.dart';
-import 'package:sell_on_app/widgets/product_image.dart';
-import 'package:sell_on_app/widgets/skeleton.dart';
-import 'package:sell_on_app/widgets/soft_card.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/models/product.dart';
+import 'package:grand_elephants/utils/spring_curve.dart';
+import 'package:grand_elephants/widgets/price_tag.dart';
+import 'package:grand_elephants/widgets/product_image.dart';
+import 'package:grand_elephants/widgets/skeleton.dart';
+import 'package:grand_elephants/widgets/soft_card.dart';
 
 class ProductCard extends StatefulWidget {
   final Product product;

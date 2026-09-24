@@ -1,5 +1,5 @@
-name: sell_on_app
-description: "Sell On App - Premium Marketplace & Luxury Heritage"
+name: grand_elephants
+description: "Grand Elephants - Premium Marketplace & Luxury Heritage"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -24,6 +24,8 @@ dependencies:
   vector_map_tiles_pmtiles: ^1.5.0
   vector_tile_renderer: ^5.2.1
   latlong2: ^0.9.1
+  firebase_core: ^4.15.0
+  firebase_messaging: ^16.7.0
 
 dev_dependencies:
   flutter_test:

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/providers/config_provider.dart';
-import 'package:sell_on_app/providers/notification_provider.dart';
-import 'package:sell_on_app/services/storage_service.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/providers/notification_provider.dart';
+import 'package:grand_elephants/services/storage_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});

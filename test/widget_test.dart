@@ -1,8 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:sell_on_app/models/product.dart';
-import 'package:sell_on_app/models/cart_item.dart';
-import 'package:sell_on_app/models/user.dart';
-import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:grand_elephants/models/product.dart';
+import 'package:grand_elephants/models/cart_item.dart';
+import 'package:grand_elephants/models/user.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
 
 Product testProduct() => const Product(
       id: '99',

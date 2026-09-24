@@ -2,9 +2,9 @@ import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sell_on_app/providers/rider_provider.dart';
-import 'package:sell_on_app/widgets/soft_button.dart';
-import 'package:sell_on_app/widgets/toast.dart';
+import 'package:grand_elephants/providers/rider_provider.dart';
+import 'package:grand_elephants/widgets/soft_button.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 
 class DeliveryCameraScreen extends StatefulWidget {
   final String? orderId;

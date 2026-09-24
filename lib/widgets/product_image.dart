@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
 
 /// Renders a product image that may be a bundled asset (`assets/...`) or a
 /// network URL (`http(s)://...`).

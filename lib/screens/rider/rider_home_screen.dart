@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/models/cart_item.dart';
-import 'package:sell_on_app/providers/config_provider.dart';
-import 'package:sell_on_app/providers/rider_provider.dart';
-import 'package:sell_on_app/widgets/soft_button.dart';
-import 'package:sell_on_app/widgets/soft_card.dart';
-import 'package:sell_on_app/widgets/toast.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/models/cart_item.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/providers/rider_provider.dart';
+import 'package:grand_elephants/widgets/soft_button.dart';
+import 'package:grand_elephants/widgets/soft_card.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 
 class RiderHomeScreen extends StatefulWidget {
   const RiderHomeScreen({super.key});

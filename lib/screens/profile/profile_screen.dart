@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/models/user.dart';
-import 'package:sell_on_app/providers/auth_provider.dart';
-import 'package:sell_on_app/providers/cart_provider.dart';
-import 'package:sell_on_app/providers/config_provider.dart';
-import 'package:sell_on_app/providers/wishlist_provider.dart';
-import 'package:sell_on_app/services/api_client.dart';
-import 'package:sell_on_app/widgets/soft_button.dart';
-import 'package:sell_on_app/widgets/soft_card.dart';
-import 'package:sell_on_app/widgets/toast.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/models/user.dart';
+import 'package:grand_elephants/providers/auth_provider.dart';
+import 'package:grand_elephants/providers/cart_provider.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/providers/wishlist_provider.dart';
+import 'package:grand_elephants/services/api_client.dart';
+import 'package:grand_elephants/widgets/soft_button.dart';
+import 'package:grand_elephants/widgets/soft_card.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});

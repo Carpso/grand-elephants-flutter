@@ -81,7 +81,7 @@ class _HostedMapState extends State<HostedMap> {
         else
           TileLayer(
             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'com.sellonapp.app',
+            userAgentPackageName: 'com.grandelephants.shop',
           ),
         if (widget.polylines.isNotEmpty) PolylineLayer(polylines: widget.polylines),
         if (widget.markers.isNotEmpty) MarkerLayer(markers: widget.markers),

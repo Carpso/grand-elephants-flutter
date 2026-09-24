@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/providers/config_provider.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
 
 class PriceTag extends StatelessWidget {
   final double amount;

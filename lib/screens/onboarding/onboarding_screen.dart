@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/services/storage_service.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/services/storage_service.dart';
 
 class Slide {
   final String id;

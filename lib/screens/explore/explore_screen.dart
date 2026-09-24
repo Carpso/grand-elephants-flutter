@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/models/product.dart';
-import 'package:sell_on_app/providers/cart_provider.dart';
-import 'package:sell_on_app/providers/catalog_provider.dart';
-import 'package:sell_on_app/providers/wishlist_provider.dart';
-import 'package:sell_on_app/widgets/price_tag.dart';
-import 'package:sell_on_app/widgets/skeleton.dart';
-import 'package:sell_on_app/widgets/soft_card.dart';
-import 'package:sell_on_app/widgets/toast.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/models/product.dart';
+import 'package:grand_elephants/providers/cart_provider.dart';
+import 'package:grand_elephants/providers/catalog_provider.dart';
+import 'package:grand_elephants/providers/wishlist_provider.dart';
+import 'package:grand_elephants/widgets/price_tag.dart';
+import 'package:grand_elephants/widgets/skeleton.dart';
+import 'package:grand_elephants/widgets/soft_card.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});

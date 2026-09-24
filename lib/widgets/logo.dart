@@ -11,7 +11,7 @@ class Logo extends StatelessWidget {
       width: size,
       height: size,
       child: Image.asset(
-        'assets/logo.png',
+        'assets/images/grandelephants_icon.jpg',
         fit: BoxFit.contain,
       ),
     );

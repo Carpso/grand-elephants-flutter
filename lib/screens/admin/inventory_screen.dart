@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
-import 'package:sell_on_app/models/product.dart';
-import 'package:sell_on_app/screens/admin/add_product_screen.dart';
-import 'package:sell_on_app/services/api_client.dart';
-import 'package:sell_on_app/widgets/soft_card.dart';
-import 'package:sell_on_app/widgets/toast.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/models/product.dart';
+import 'package:grand_elephants/screens/admin/add_product_screen.dart';
+import 'package:grand_elephants/services/api_client.dart';
+import 'package:grand_elephants/widgets/soft_card.dart';
+import 'package:grand_elephants/widgets/toast.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});

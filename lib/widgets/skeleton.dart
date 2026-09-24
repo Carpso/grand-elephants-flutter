@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:sell_on_app/constants/app_theme.dart';
+import 'package:grand_elephants/constants/app_theme.dart';
 
 class Skeleton extends StatelessWidget {
   final double? width;

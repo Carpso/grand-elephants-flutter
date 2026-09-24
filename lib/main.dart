@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'constants/app_theme.dart';
@@ -54,8 +55,13 @@ import 'screens/admin/admin_settings_screen.dart' as admin_settings;
 import 'screens/superadmin/collection_numbers_screen.dart';
 import 'widgets/toast.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Firebase init failed: $e');
+  }
   runZonedGuarded(() {
     runApp(const SellOnApp());
   }, (error, stack) {
@@ -85,7 +91,7 @@ class SellOnApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AppDataProvider()),
       ],
       child: MaterialApp(
-        title: 'Sell On App',
+        title: 'Grand Elephants',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
