@@ -1,6 +1,6 @@
 # SESSION_STATE — Grand Elephants (Flutter app)
 
-Saved: 2026-09-25. Companion: same file in `grand-elephants-api`.
+Saved: 2026-09-27. Companion: same file in `grand-elephants-api`.
 
 ## Project identity
 - Product: **Grand Elephants** — bags-only marketplace ("Move With Conviction")
@@ -30,6 +30,7 @@ Saved: 2026-09-25. Companion: same file in `grand-elephants-api`.
 - **TPIN**: checkout field (10 digits) → `POST /api/orders {tpin}` → `buyerTpin` on order/invoice/receipt.
 - **Receipts**: `pdf`+`printing` added; `lib/services/receipt_service.dart` (server `/api/orders/:id/receipt` + local fallback); Print/Share on receipt + order detail.
 - **Tax**: `lib/screens/business/tax_screen.dart` (`/business/tax`) — VAT summary, VAT-by-sale w/ TPIN, record payments.
+- **2026-09-27 incident (server-side, no app change)**: "Send Code" button got no response → no OTP request/verify because the live Worker deployment was **assets-only** (empty 404s at the edge, CF `100311`). Fixed by redeploying the API (`245a7263`); `request-otp`/`verify-otp` verified live (real SMS dispatched). Diagnostic: empty-body 404s on every path → redeploy from the api repo.
 
 ## Known gaps / next steps
 - iOS bundle id still `com.sellonapp.sellOnApp` in `project.pbxproj` (display name fixed; rename bundle if shipping iOS).

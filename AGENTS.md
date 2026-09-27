@@ -80,4 +80,7 @@ Base URL: `https://grand-elephants-api.godfreymoseskalambo.workers.dev`
 ## Deployment
 
 Website = `flutter build web --release`; the worker serves `build/web`. Run the
-deploy script from the `grand-elephants-api` repo.
+deploy script from the `grand-elephants-api` repo. After any deploy, verify
+`GET /api/products` returns JSON — empty-body 404s on every path mean the
+Worker lost its script (assets-only deployment, CF `100311`); redeploy from
+the api repo (incident 2026-09-27, fixed with `245a7263`).
