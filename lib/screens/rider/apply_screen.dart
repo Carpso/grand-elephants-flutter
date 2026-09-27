@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/providers/auth_provider.dart';
 import 'package:grand_elephants/services/image_util.dart';
+import 'package:grand_elephants/services/upload_service.dart';
 import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
@@ -48,7 +49,12 @@ class _ApplyScreenState extends State<ApplyScreen> {
           .show('Could not read that image, pick another one', ToastType.error);
       return;
     }
-    setState(() => _bikePhoto = dataUri);
+    final bikePhoto = await UploadService.uploadOrFallback(
+      dataUri,
+      folder: UploadFolder.riders,
+    );
+    if (!mounted) return;
+    setState(() => _bikePhoto = bikePhoto);
   }
 
   Future<void> _handleSubmit() async {

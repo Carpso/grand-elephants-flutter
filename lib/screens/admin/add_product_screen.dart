@@ -5,6 +5,7 @@ import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/providers/auth_provider.dart';
 import 'package:grand_elephants/services/api_client.dart';
 import 'package:grand_elephants/services/image_util.dart';
+import 'package:grand_elephants/services/upload_service.dart';
 import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_input.dart';
@@ -51,7 +52,12 @@ class _AddProductScreenState extends State<AddProductScreen> {
           .show('Could not read that image, pick another one', ToastType.error);
       return;
     }
-    setState(() => _image = dataUri);
+    final image = await UploadService.uploadOrFallback(
+      dataUri,
+      folder: UploadFolder.products,
+    );
+    if (!mounted) return;
+    setState(() => _image = image);
   }
 
   /// Admins publish to the marketplace catalogue, shop teams publish to their

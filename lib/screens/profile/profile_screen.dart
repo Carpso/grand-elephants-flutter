@@ -10,6 +10,7 @@ import 'package:grand_elephants/providers/config_provider.dart';
 import 'package:grand_elephants/providers/wishlist_provider.dart';
 import 'package:grand_elephants/services/api_client.dart';
 import 'package:grand_elephants/services/image_util.dart';
+import 'package:grand_elephants/services/upload_service.dart';
 import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
@@ -62,8 +63,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       return;
     }
 
+    final photo = await UploadService.uploadOrFallback(
+      dataUri,
+      folder: UploadFolder.profiles,
+    );
+    if (!mounted) return;
+
     try {
-      await ApiClient.instance.patch('/api/me', body: {'profilePhoto': dataUri});
+      await ApiClient.instance.patch('/api/me', body: {'profilePhoto': photo});
       await auth.updateProfile(name: user.name, email: user.email);
       if (!mounted) return;
       ToastProvider.of(context).show('Profile photo updated', ToastType.success);

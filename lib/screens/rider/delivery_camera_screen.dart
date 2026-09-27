@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/providers/rider_provider.dart';
 import 'package:grand_elephants/services/image_util.dart';
+import 'package:grand_elephants/services/upload_service.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 
@@ -111,7 +112,12 @@ class _DeliveryCameraScreenState extends State<DeliveryCameraScreen>
             .show('Could not read that photo, take it again', ToastType.error);
         return;
       }
-      await rider.updateOrderStatus(orderId, 'Delivered', proofPhoto: proof);
+      final photo = await UploadService.uploadOrFallback(
+        proof,
+        folder: UploadFolder.deliveries,
+      );
+      if (!mounted) return;
+      await rider.updateOrderStatus(orderId, 'Delivered', proofPhoto: photo);
       if (!mounted) return;
       ToastProvider.of(context)
           .show('Order $orderId marked as Delivered!', ToastType.success);

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'constants/app_theme.dart';
@@ -69,6 +70,69 @@ final navigatorKey = GlobalKey<NavigatorState>();
 /// BuildContext (like [AuthProvider]) avoid navigating when pointless.
 String currentRouteName = '/splash';
 
+/// Named routes the router knows about. FCM deep links are validated against
+/// this map (see [isKnownAppRoute]) so a notification can never push an
+/// arbitrary URL onto the navigator.
+final Map<String, WidgetBuilder> appRoutes = <String, WidgetBuilder>{
+  '/': (_) => const HomeShell(),
+  '/splash': (_) => const SplashScreen(),
+  '/onboarding': (_) => const OnboardingScreen(),
+  '/login': (_) => const LoginScreen(),
+  '/signup': (_) => const SignupScreen(),
+  '/home': (_) => const HomeShell(),
+  '/explore': (_) => const ExploreScreen(),
+  '/profile': (_) => const ProfileScreen(),
+  '/profile/settings': (_) => const SettingsScreen(),
+  '/profile/wishlist': (_) => const WishlistScreen(),
+  '/profile/addresses': (_) => const AddressesScreen(),
+  '/profile/notifications': (_) => const profile_notif.NotificationsScreen(),
+  '/profile/help': (_) => const HelpScreen(),
+  '/orders': (_) => const OrderListScreen(),
+  '/orders/track': (_) => const OrderTrackingScreen(),
+  '/cart/checkout': (_) => const cart_checkout.CheckoutScreen(),
+  '/cart/receipt': (_) => const ReceiptScreen(),
+  '/cart/checkout/success': (_) => const CheckoutSuccessScreen(),
+  '/scan': (_) => const ScanScreen(),
+  '/try-on': (_) => const TryOnScreen(),
+  '/support': (_) => const ChatScreen(),
+  '/support/chat': (_) => const ChatScreen(),
+  '/rider/apply': (_) => const ApplyScreen(),
+  '/business/apply': (_) => const BusinessApplyScreen(),
+  '/business/dashboard': (_) => const BusinessDashboardScreen(),
+  '/business/home': (_) => const BusinessHomeScreen(),
+  '/business/tax': (_) => const TaxScreen(),
+  '/business/collection-numbers': (_) => const CollectionNumbersScreen(),
+  '/business/products/add': (_) => const AddProductScreen(),
+  '/employee/stock': (_) => const EmployeeStockScreen(),
+  '/admin': (_) => const AdminHomeScreen(),
+  '/admin/businesses': (_) => const BusinessesScreen(),
+  '/admin/dashboard': (_) => const admin_dash.DashboardScreen(),
+  '/admin/users': (_) => const UsersScreen(),
+  '/admin/riders': (_) => const RidersScreen(),
+  '/admin/employees': (_) => const EmployeesScreen(),
+  '/admin/categories': (_) => const CategoriesScreen(),
+  '/admin/banners': (_) => const BannersScreen(),
+  '/admin/inventory': (_) => const InventoryScreen(),
+  '/admin/sales': (_) => const SalesScreen(),
+  '/admin/finance': (_) => const FinanceScreen(),
+  '/admin/marketing': (_) => const MarketingScreen(),
+  '/admin/notifications': (_) => const AdminNotificationsScreen(),
+  '/admin/settings': (_) => const admin_settings.AdminSettingsScreen(),
+  '/superadmin/dashboard': (_) => const SuperadminDashboardScreen(),
+  '/superadmin/collection-numbers': (_) => const CollectionNumbersScreen(),
+  '/admin/collection-numbers': (_) => const admin_collections.AdminCollectionNumbersScreen(),
+};
+
+/// Returns true when [route] resolves to a screen this app actually ships:
+/// an entry in [appRoutes] or one of the id-bearing detail routes that
+/// `onGenerateRoute` builds from a path segment.
+bool isKnownAppRoute(String route) {
+  if (appRoutes.containsKey(route)) return true;
+  if (route.startsWith('/product/')) return route.length > '/product/'.length;
+  if (route.startsWith('/orders/')) return route.length > '/orders/'.length;
+  return false;
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
@@ -77,10 +141,94 @@ Future<void> main() async {
     debugPrint('Firebase init failed: $e');
   }
   runZonedGuarded(() {
+    unawaited(_initPushNavigation());
     runApp(const SellOnApp());
   }, (error, stack) {
     debugPrint('Uncaught error: $error');
   });
+}
+
+/// Subscribes to notification taps and requests permission. Runs before the
+/// first frame: the listener is attached synchronously and the rest resolves
+/// in the background so app start is never blocked. Foreground messages keep
+/// their current behaviour (server-side notifications list).
+Future<void> _initPushNavigation() async {
+  try {
+    FirebaseMessaging.onMessageOpenedApp
+        .listen((message) => _handleRemoteMessage(message));
+  } catch (e) {
+    debugPrint('FCM tap listener failed: $e');
+  }
+  try {
+    final messaging = FirebaseMessaging.instance;
+    await messaging.requestPermission().timeout(const Duration(seconds: 5));
+    final initial =
+        await messaging.getInitialMessage().timeout(const Duration(seconds: 5));
+    if (initial != null) {
+      // Terminated state: start once the app is up; the handler itself waits
+      // for the navigator and for the splash route to hand over.
+      Future.delayed(const Duration(milliseconds: 900), () {
+        _handleRemoteMessage(initial, fromStartup: true);
+      });
+    }
+  } catch (e) {
+    debugPrint('FCM init failed: $e');
+  }
+}
+
+/// Waits until the navigator exists (up to ~5s) so a tap can be handled
+/// right after launch or resume without racing the first frame.
+Future<bool> _waitForNavigator() async {
+  for (var i = 0; i < 50; i++) {
+    if (navigatorKey.currentState != null) return true;
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+  return false;
+}
+
+/// The splash screen replaces itself with `/home` a couple of seconds after
+/// launch; stacking a route underneath that replacement would lose the deep
+/// link, so startup handling waits for splash to hand over first.
+Future<void> _waitForSplashToFinish() async {
+  final deadline = DateTime.now().add(const Duration(seconds: 8));
+  while (currentRouteName == '/splash' && DateTime.now().isBefore(deadline)) {
+    await Future.delayed(const Duration(milliseconds: 100));
+  }
+}
+
+/// Navigates to `message.data['route']` when it is a known app route and the
+/// user has a session; anything else is ignored.
+Future<void> _handleRemoteMessage(
+  RemoteMessage message, {
+  bool fromStartup = false,
+}) async {
+  final raw = message.data['route'];
+  final route = raw == null ? '' : raw.toString().trim();
+  if (route.isEmpty || !isKnownAppRoute(route)) return;
+
+  if (!await _waitForNavigator()) return;
+  final context = navigatorKey.currentContext;
+  if (context == null || !context.mounted) return;
+  final auth = Provider.of<AuthProvider>(context, listen: false);
+
+  // Startup: let the splash screen hand over to /home first, otherwise its
+  // own pushReplacement would swallow this route.
+  if (fromStartup) await _waitForSplashToFinish();
+
+  try {
+    await auth.ready.timeout(const Duration(seconds: 6));
+  } catch (_) {
+    debugPrint('Session restore timed out before opening $route');
+  }
+  if (!auth.isLoggedIn) return;
+
+  final navigator = navigatorKey.currentState;
+  if (navigator == null) return;
+  if (currentRouteName == '/splash') {
+    navigator.pushNamedAndRemoveUntil(route, (r) => false);
+  } else {
+    navigator.pushNamed(route);
+  }
 }
 
 class SellOnApp extends StatelessWidget {
@@ -116,56 +264,6 @@ class SellOnApp extends StatelessWidget {
           if (settings.name != null && settings.name!.isNotEmpty) {
             currentRouteName = settings.name!;
           }
-
-          final routes = <String, WidgetBuilder>{
-            '/': (_) => const HomeShell(),
-            '/splash': (_) => const SplashScreen(),
-            '/onboarding': (_) => const OnboardingScreen(),
-            '/login': (_) => const LoginScreen(),
-            '/signup': (_) => const SignupScreen(),
-            '/home': (_) => const HomeShell(),
-            '/explore': (_) => const ExploreScreen(),
-            '/profile': (_) => const ProfileScreen(),
-            '/profile/settings': (_) => const SettingsScreen(),
-            '/profile/wishlist': (_) => const WishlistScreen(),
-            '/profile/addresses': (_) => const AddressesScreen(),
-            '/profile/notifications': (_) => const profile_notif.NotificationsScreen(),
-            '/profile/help': (_) => const HelpScreen(),
-            '/orders': (_) => const OrderListScreen(),
-            '/orders/track': (_) => const OrderTrackingScreen(),
-            '/cart/checkout': (_) => const cart_checkout.CheckoutScreen(),
-            '/cart/receipt': (_) => const ReceiptScreen(),
-            '/cart/checkout/success': (_) => const CheckoutSuccessScreen(),
-            '/scan': (_) => const ScanScreen(),
-            '/try-on': (_) => const TryOnScreen(),
-            '/support': (_) => const ChatScreen(),
-            '/support/chat': (_) => const ChatScreen(),
-            '/rider/apply': (_) => const ApplyScreen(),
-            '/business/apply': (_) => const BusinessApplyScreen(),
-            '/business/dashboard': (_) => const BusinessDashboardScreen(),
-            '/business/home': (_) => const BusinessHomeScreen(),
-            '/business/tax': (_) => const TaxScreen(),
-            '/business/collection-numbers': (_) => const CollectionNumbersScreen(),
-            '/business/products/add': (_) => const AddProductScreen(),
-            '/employee/stock': (_) => const EmployeeStockScreen(),
-            '/admin': (_) => const AdminHomeScreen(),
-            '/admin/businesses': (_) => const BusinessesScreen(),
-            '/admin/dashboard': (_) => const admin_dash.DashboardScreen(),
-            '/admin/users': (_) => const UsersScreen(),
-            '/admin/riders': (_) => const RidersScreen(),
-            '/admin/employees': (_) => const EmployeesScreen(),
-            '/admin/categories': (_) => const CategoriesScreen(),
-            '/admin/banners': (_) => const BannersScreen(),
-            '/admin/inventory': (_) => const InventoryScreen(),
-            '/admin/sales': (_) => const SalesScreen(),
-            '/admin/finance': (_) => const FinanceScreen(),
-            '/admin/marketing': (_) => const MarketingScreen(),
-            '/admin/notifications': (_) => const AdminNotificationsScreen(),
-            '/admin/settings': (_) => const admin_settings.AdminSettingsScreen(),
-            '/superadmin/dashboard': (_) => const SuperadminDashboardScreen(),
-            '/superadmin/collection-numbers': (_) => const CollectionNumbersScreen(),
-            '/admin/collection-numbers': (_) => const admin_collections.AdminCollectionNumbersScreen(),
-          };
 
           final adminOnlyRoutes = {
             '/admin',
@@ -221,7 +319,7 @@ class SellOnApp extends StatelessWidget {
             }
           }
 
-          final builder = routes[settings.name];
+          final builder = appRoutes[settings.name];
           if (builder != null) return MaterialPageRoute(builder: builder, settings: settings);
 
           if (settings.name != null && settings.name!.startsWith('/product/')) {

@@ -153,6 +153,16 @@ class ConfigProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drops a category after the server accepted `DELETE /api/admin/categories/:id`.
+  void removeCategory(String id) {
+    _categories.removeWhere((c) => c.id == id);
+    notifyListeners();
+  }
+
+  /// Re-reads branding, categories and banners from the API so admin writes
+  /// show up on the storefront without restarting.
+  Future<void> reload() => _loadFromApi();
+
   void toggleMaintenanceMode() {
     _maintenanceMode = !_maintenanceMode;
     notifyListeners();

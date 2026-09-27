@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
+import 'package:grand_elephants/providers/catalog_provider.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
 import 'package:grand_elephants/services/api_client.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
@@ -70,6 +71,54 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     }
   }
 
+  Future<void> _confirmDelete(Category cat) async {
+    if (_saving) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Category'),
+        content: Text(
+          'Remove "${cat.name}" from the storefront? Products that already '
+          'use it keep their category text.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final config = context.read<ConfigProvider>();
+    final catalog = context.read<CatalogProvider>();
+    setState(() => _saving = true);
+    try {
+      await ApiClient.instance.delete('/api/admin/categories/${cat.id}');
+      await config.reload();
+      config.removeCategory(cat.id);
+      await catalog.load();
+      if (!mounted) return;
+      ToastProvider.of(context).show('Category "${cat.name}" deleted.', ToastType.success);
+    } catch (e) {
+      if (mounted) {
+        final message =
+            '$e'.replaceFirst('Exception: ', '').replaceFirst('ApiException: ', '');
+        ToastProvider.of(context).show(
+          message.isEmpty ? 'Could not delete that category' : message,
+          ToastType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final config = context.watch<ConfigProvider>();
@@ -114,6 +163,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                         ),
                         const Icon(Icons.check_circle,
                             size: 20, color: AppColors.success),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline,
+                              size: 22, color: AppColors.error),
+                          tooltip: 'Delete category',
+                          onPressed:
+                              _saving ? null : () => _confirmDelete(cat),
+                        ),
                       ],
                     ),
                   ),
