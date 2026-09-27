@@ -30,7 +30,7 @@ Saved: 2026-09-27. Companion: same file in `grand-elephants-api`.
 - **TPIN**: checkout field (10 digits) → `POST /api/orders {tpin}` → `buyerTpin` on order/invoice/receipt.
 - **Receipts**: `pdf`+`printing` added; `lib/services/receipt_service.dart` (server `/api/orders/:id/receipt` + local fallback); Print/Share on receipt + order detail.
 - **Tax**: `lib/screens/business/tax_screen.dart` (`/business/tax`) — VAT summary, VAT-by-sale w/ TPIN, record payments.
-- **2026-09-27 incident (server-side, no app change)**: "Send Code" button got no response → no OTP request/verify because the live Worker deployment was **assets-only** (empty 404s at the edge, CF `100311`). Fixed by redeploying the API (`245a7263`); `request-otp`/`verify-otp` verified live (real SMS dispatched). Diagnostic: empty-body 404s on every path → redeploy from the api repo.
+- **2026-09-27 incidents (server-side, no app change)**: (1) "Send Code" got no response because the live Worker deployment was **assets-only** (empty 404s at the edge, CF `100311`). (2) A **foreign deployment** (`6841ad08`, 08:08Z, foreign config) broke it again and **wiped all Worker secrets** → `verify-otp` 500 (empty JWT) + silent SMS failure. Fixed: redeploy + secrets re-put; **`LIPILA_API_KEY` value is lost — user must re-put it from the Lipila dashboard**. Full browser E2E now passes: type number → Send Code → `request-otp 200` → code → Verify → `verify-otp 200` → logged-in Home. See api SESSION_STATE for value sources + the warning about a second active deployer (it will break prod again unless coordinated). `.dev.vars` = local placeholders only.
 
 ## Known gaps / next steps
 - iOS bundle id still `com.sellonapp.sellOnApp` in `project.pbxproj` (display name fixed; rename bundle if shipping iOS).
