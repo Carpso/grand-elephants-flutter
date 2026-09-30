@@ -26,6 +26,7 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AdminProvider>().loadStats();
+      context.read<AdminProvider>().loadLipilaBalance();
       _loadMaintenanceFlag();
     });
   }
@@ -43,22 +44,12 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
     }
   }
 
-  String _formatCents(int cents) {
-    final amount = cents / 100;
-    final parts = amount.toStringAsFixed(2).split('.');
-    final buf = StringBuffer();
-    for (var i = 0; i < parts[0].length; i++) {
-      if (i > 0 && (parts[0].length - i) % 3 == 0) buf.write(',');
-      buf.write(parts[0][i]);
-    }
-    return 'K ${buf.toString()}.${parts[1]}';
-  }
-
   @override
   Widget build(BuildContext context) {
     final config = context.watch<ConfigProvider>();
     final auth = context.watch<AuthProvider>();
-    final stats = context.watch<AdminProvider>().stats;
+    final admin = context.watch<AdminProvider>();
+    final stats = admin.stats;
 
     return Scaffold(
       body: Column(
@@ -68,7 +59,9 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
             child: ListView(
               padding: const EdgeInsets.all(24),
               children: [
-                _buildPerformanceCard(stats),
+                _buildWalletCard(config, admin),
+                const SizedBox(height: 24),
+                _buildPerformanceCard(stats, config),
                 const SizedBox(height: 24),
                 const Padding(
                   padding: EdgeInsets.only(bottom: 16),
@@ -204,7 +197,80 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
     );
   }
 
-  Widget _buildPerformanceCard(AdminStats stats) {
+  /// Lipila settlement wallet + total business wallets (AGENTS contract:
+  /// the superadmin dashboard must show the Lipila wallet balance).
+  Widget _buildWalletCard(ConfigProvider config, AdminProvider admin) {
+    final lipila = admin.lipilaBalance;
+    return SoftCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'WALLETS',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+              color: AppColors.brandMuted,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Lipila Wallet',
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.brandMuted),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      lipila == null
+                          ? (admin.error != null ? 'Unavailable' : 'Loading…')
+                          : config.formatPrice(lipila),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text(
+                      'Business Wallets',
+                      textAlign: TextAlign.right,
+                      style:
+                          TextStyle(fontSize: 12, color: AppColors.brandMuted),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      config.formatPrice(admin.businessWalletCents / 100),
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.brandDark,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPerformanceCard(AdminStats stats, ConfigProvider config) {
     final raw = <double>[
       stats.users.toDouble(),
       stats.businesses.toDouble(),
@@ -282,7 +348,7 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
                     style: TextStyle(fontSize: 12, color: AppColors.brandMuted),
                   ),
                   Text(
-                    _formatCents(stats.gmvCents),
+                    config.formatPrice(stats.gmvCents / 100),
                     style: const TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -320,17 +386,17 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
       {
         'title': 'Global Settings',
         'icon': Icons.settings,
-        'desc': 'Tax, Maintenance, Backup',
+        'desc': 'Branding, Tax & Maintenance',
       },
       {
-        'title': 'Social Planner',
-        'icon': Icons.schedule,
-        'desc': 'Auto-post to FB/Insta',
+        'title': 'Marketing Suite',
+        'icon': Icons.campaign,
+        'desc': 'Create promo flyers',
       },
       {
         'title': 'System Health',
         'icon': Icons.monitor_heart,
-        'desc': 'Real-time Metrics',
+        'desc': 'API & database status',
       },
       {
         'title': 'Access Control',
@@ -341,6 +407,16 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
         'title': 'Collection Numbers',
         'icon': Icons.phone_android,
         'desc': 'Manage Mobile Money Numbers',
+      },
+      {
+        'title': 'Security Logs',
+        'icon': Icons.receipt_long,
+        'desc': 'Audit & Lipila events',
+      },
+      {
+        'title': 'Finance & Rates',
+        'icon': Icons.account_balance,
+        'desc': 'Wallets, payouts & fees',
       },
     ];
 
@@ -361,8 +437,12 @@ class _SuperadminDashboardScreenState extends State<SuperadminDashboardScreen> {
                   Navigator.pushNamed(context, '/admin/settings');
                 case 'Access Control':
                   Navigator.pushNamed(context, '/admin/users');
-                case 'Social Planner':
+                case 'Marketing Suite':
                   Navigator.pushNamed(context, '/admin/marketing');
+                case 'Security Logs':
+                  Navigator.pushNamed(context, '/admin/notifications');
+                case 'Finance & Rates':
+                  Navigator.pushNamed(context, '/admin/finance');
               }
             },
             borderRadius: BorderRadius.circular(16),

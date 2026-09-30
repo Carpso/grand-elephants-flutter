@@ -74,6 +74,17 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
     return parts.isEmpty ? '?' : parts.map((p) => p[0].toUpperCase()).join();
   }
 
+  String _fxTimeLabel(ConfigProvider config) {
+    final updated = config.fxUpdatedAt;
+    if (updated == null) return '';
+    final dt = updated.toLocal();
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${dt.day}/${dt.month}/${dt.year}';
+  }
+
   void _showReport() {
     final config = context.read<ConfigProvider>();
     final summary = StringBuffer()
@@ -414,6 +425,7 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
             child: SoftCard(
+              onTap: config.refreshFx,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -445,12 +457,20 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                             ),
                           ),
                           Text(
-                            '1 USD = ${(1 / config.exchangeRate).toStringAsFixed(2)} ZMW',
+                            '1 USD = ${config.usdToZmw.toStringAsFixed(2)} ZMW',
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
                               color: AppColors.brandDark,
                             ),
                           ),
+                          if (config.fxUpdatedAt != null)
+                            Text(
+                              'Updated ${_fxTimeLabel(config)} · tap to refresh',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: AppColors.brandMuted,
+                              ),
+                            ),
                         ],
                       ),
                     ],
@@ -462,9 +482,9 @@ class _BusinessDashboardScreenState extends State<BusinessDashboardScreen> {
                       color: AppColors.brandPrimary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Text(
-                      'FIXED',
-                      style: TextStyle(
+                    child: Text(
+                      config.fxStale ? 'CACHED' : 'LIVE',
+                      style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 10,
                         color: AppColors.brandPrimary,

@@ -41,12 +41,19 @@ class ConfigProvider extends ChangeNotifier {
 
   String _currency = 'ZMW';
   String _theme = 'light';
-  final double _exchangeRate = 0.036;
+  // Value of 1 ZMW in USD. Refreshed from GET /api/fx (live USD->ZMW rate).
+  double _exchangeRate = 0.036;
+  double _usdToZmw = 1 / 0.036;
+  String _fxSource = '';
+  DateTime? _fxUpdatedAt;
+  bool _fxStale = false;
 
   List<Category> _categories = [];
   List<Map<String, dynamic>> _homeBanners = [];
 
   double _taxRate = 16.0;
+  double _deliveryBaseFee = 25;
+  double _deliveryPerKm = 10;
   bool _maintenanceMode = false;
 
   String get appName => _appName;
@@ -56,14 +63,21 @@ class ConfigProvider extends ChangeNotifier {
   String get currency => _currency;
   String get theme => _theme;
   double get exchangeRate => _exchangeRate;
+  double get usdToZmw => _usdToZmw;
+  String get fxSource => _fxSource;
+  DateTime? get fxUpdatedAt => _fxUpdatedAt;
+  bool get fxStale => _fxStale;
   List<Category> get categories => _categories;
   double get taxRate => _taxRate;
+  double get deliveryBaseFee => _deliveryBaseFee;
+  double get deliveryPerKm => _deliveryPerKm;
   bool get maintenanceMode => _maintenanceMode;
   List<Map<String, dynamic>> get homeBanners => _homeBanners;
 
   ConfigProvider() {
     _loadLocal();
     _loadFromApi();
+    _loadFx();
   }
 
   Future<void> _loadLocal() async {
@@ -87,7 +101,11 @@ class ConfigProvider extends ChangeNotifier {
       final cfg = res as Map<String, dynamic>;
       _appName = cfg['appName'] as String? ?? _appName;
       _appSlogan = cfg['appSlogan'] as String? ?? _appSlogan;
+      _appDescription = (cfg['appDescription'] as String?)?.isNotEmpty == true
+          ? cfg['appDescription'] as String
+          : _appDescription;
       _appLogo = cfg['appLogo'] as String? ?? _appLogo;
+      _maintenanceMode = cfg['maintenanceMode'] as bool? ?? _maintenanceMode;
       _categories = (cfg['categories'] as List? ?? [])
           .map((e) => Category.fromJson(e as Map<String, dynamic>))
           .toList();
@@ -97,9 +115,37 @@ class ConfigProvider extends ChangeNotifier {
       _taxRate = double.tryParse(
               (cfg['feeInfo'] as Map<String, dynamic>?)?['vatPct']?.toString() ?? '') ??
           _taxRate;
+      final feeInfo = cfg['feeInfo'] as Map<String, dynamic>?;
+      if (feeInfo != null) {
+        _deliveryBaseFee =
+            ((num.tryParse('${feeInfo['deliveryBaseFeeCents']}')?.toDouble() ?? _deliveryBaseFee * 100)) / 100;
+        _deliveryPerKm =
+            ((num.tryParse('${feeInfo['deliveryPerKmCents']}')?.toDouble() ?? _deliveryPerKm * 100)) / 100;
+      }
       notifyListeners();
     } catch (e) {
       debugPrint('Config api fetch error: $e');
+    }
+  }
+
+  /// Loads the live USD->ZMW rate from GET /api/fx. The backend caches the
+  /// rate for 6 hours and falls back to the last good rate, so this is cheap.
+  Future<void> _loadFx() async {
+    try {
+      final res = await ApiClient.instance.get('/api/fx', withAuth: false);
+      final fx = res as Map<String, dynamic>;
+      final rate = double.tryParse(fx['usdToZmw']?.toString() ?? '');
+      if (rate != null && rate > 0) {
+        _usdToZmw = rate;
+        _exchangeRate = 1 / rate;
+        _fxSource = fx['source']?.toString() ?? '';
+        _fxStale = fx['stale'] as bool? ?? false;
+        final updated = fx['updatedAt']?.toString();
+        _fxUpdatedAt = updated == null ? null : DateTime.tryParse(updated);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('FX fetch error: $e');
     }
   }
 
@@ -119,12 +165,30 @@ class ConfigProvider extends ChangeNotifier {
       await ApiClient.instance.patch('/api/admin/settings', body: {
         'app_name': name,
         'app_slogan': slogan,
+        'app_description': description,
         'app_logo': logo,
       });
     } catch (e) {
       debugPrint('Settings save to API failed: $e');
     }
   }
+
+  /// Persists the maintenance flag to the server (admins only).
+  /// The backend enforces it for every non-admin API call.
+  Future<bool> setMaintenanceMode(bool on) async {
+    try {
+      await ApiClient.instance
+          .patch('/api/admin/settings', body: {'maintenance_mode': on});
+      _maintenanceMode = on;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('Maintenance mode save failed: $e');
+      return false;
+    }
+  }
+
+  void refreshFx() => _loadFx();
 
   void toggleCurrency() {
     _currency = _currency == 'ZMW' ? 'USD' : 'ZMW';

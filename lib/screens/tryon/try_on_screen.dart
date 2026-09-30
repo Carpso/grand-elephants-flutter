@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/models/product.dart';
@@ -37,8 +38,11 @@ class _TryOnScreenState extends State<TryOnScreen>
 
   CameraController? _cameraController;
   bool _cameraReady = false;
+  bool _cameraStarting = false;
+  String? _cameraError;
   Uint8List? _capturedBytes;
   bool _capturing = false;
+  final ImagePicker _imagePicker = ImagePicker();
 
   late final AnimationController _contentController;
   late final Animation<double> _contentOpacity;
@@ -116,11 +120,23 @@ class _TryOnScreenState extends State<TryOnScreen>
 
   Future<void> _initCamera() async {
     await _stopCamera();
+    if (mounted) {
+      setState(() {
+        _cameraStarting = true;
+        _cameraError = null;
+      });
+    }
     CameraController? controller;
     try {
       final cameras = await availableCameras();
       if (cameras.isEmpty) {
-        if (mounted) setState(() => _cameraReady = false);
+        if (mounted) {
+          setState(() {
+            _cameraStarting = false;
+            _cameraReady = false;
+            _cameraError = 'No camera was found on this device.';
+          });
+        }
         return;
       }
       controller = CameraController(
@@ -134,10 +150,21 @@ class _TryOnScreenState extends State<TryOnScreen>
         await _disposeController(controller);
         return;
       }
-      setState(() => _cameraReady = true);
-    } catch (_) {
+      setState(() {
+        _cameraStarting = false;
+        _cameraReady = true;
+        _cameraError = null;
+      });
+    } catch (e) {
       if (controller != null) await _disposeController(controller);
-      if (mounted) setState(() => _cameraReady = false);
+      if (mounted) {
+        setState(() {
+          _cameraStarting = false;
+          _cameraReady = false;
+          _cameraError =
+              'Camera could not start (permission denied or unavailable). You can retry or upload a photo instead.';
+        });
+      }
     }
   }
 
@@ -154,9 +181,41 @@ class _TryOnScreenState extends State<TryOnScreen>
       _showAR = true;
       _isProcessing = false;
       _capturedBytes = null;
+      _cameraError = null;
     });
     _arItemController.forward(from: 0);
     await _initCamera();
+  }
+
+  /// Photo fallback: lets the buyer pick an image from their device (works on
+  /// web too) and use it as the try-on background when the camera is not
+  /// available.
+  Future<void> _handlePickPhoto() async {
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      await _stopCamera();
+      if (!mounted) return;
+      setState(() {
+        _showAR = true;
+        _isCameraMode = false;
+        _cameraError = null;
+        _capturedBytes = bytes;
+        if (_productImageUrl == null || _productImageUrl!.isEmpty) {
+          _productImageUrl = _product?.image;
+        }
+      });
+      _arItemController.forward(from: 0);
+    } catch (e) {
+      if (!mounted) return;
+      ToastProvider.of(context)
+          .show('Could not open the photo picker', ToastType.error);
+    }
   }
 
   Future<void> _handleExitAR() async {
@@ -165,6 +224,8 @@ class _TryOnScreenState extends State<TryOnScreen>
     setState(() {
       _showAR = false;
       _isCameraMode = false;
+      _cameraStarting = false;
+      _cameraError = null;
       _capturedBytes = null;
     });
   }
@@ -426,6 +487,17 @@ class _TryOnScreenState extends State<TryOnScreen>
                       ),
                       onPressed: _handleStartCamera,
                     ),
+                    const SizedBox(height: 12),
+                    SoftButton(
+                      title: 'Upload Photo Instead',
+                      variant: SoftButtonVariant.secondary,
+                      icon: const Icon(
+                        Icons.photo_library,
+                        size: 20,
+                        color: AppColors.brandDark,
+                      ),
+                      onPressed: _handlePickPhoto,
+                    ),
                   ],
                 ),
               ),
@@ -542,7 +614,7 @@ class _TryOnScreenState extends State<TryOnScreen>
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      'Secured by ${config.appName} AI',
+                      '${config.appName} · On-device overlay preview',
                       style: const TextStyle(
                         color: Color(0xFF6B7280),
                         fontSize: 10,
@@ -732,8 +804,52 @@ class _TryOnScreenState extends State<TryOnScreen>
                   ],
                 ),
                 const SizedBox(height: 8),
+                if (_isCameraMode && _cameraError != null) ...[
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SoftButton(
+                          title: 'Retry Camera',
+                          variant: SoftButtonVariant.secondary,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                          onPressed: _handleStartCamera,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: SoftButton(
+                          title: 'Upload Photo',
+                          variant: SoftButtonVariant.primary,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                          onPressed: _handlePickPhoto,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
                 Row(
                   children: [
+                    if (_isCameraMode && _cameraStarting) ...[
+                      const Expanded(
+                        child: SoftButton(
+                          title: 'Starting camera…',
+                          variant: SoftButtonVariant.secondary,
+                          onPressed: null,
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 16,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                    ],
                     if (_isCameraMode && _cameraReady) ...[
                       Expanded(
                         child: SoftButton(
@@ -846,6 +962,63 @@ class _TryOnScreenState extends State<TryOnScreen>
     if (_isCameraMode && _cameraReady && controller != null) {
       return Center(child: CameraPreview(controller));
     }
+    if (_isCameraMode && _cameraStarting) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: AppColors.brandPrimary),
+              SizedBox(height: 16),
+              Text(
+                'Starting camera…',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    if (_isCameraMode && _cameraError != null) {
+      return Container(
+        color: Colors.black,
+        padding: const EdgeInsets.all(32),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.no_photography,
+                size: 64,
+                color: Colors.white.withValues(alpha: 0.4),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _cameraError!,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Use Retry Camera below, or upload a photo to continue the preview.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Container(
       color: Colors.black,
       child: Center(
@@ -859,7 +1032,7 @@ class _TryOnScreenState extends State<TryOnScreen>
             ),
             const SizedBox(height: 12),
             Text(
-              _isCameraMode ? 'Camera unavailable' : 'Preview mode',
+              'Preview mode',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.4),
                 fontWeight: FontWeight.bold,

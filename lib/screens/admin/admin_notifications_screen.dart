@@ -53,9 +53,32 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     }
   }
 
+  String _titleCase(String s) => s
+      .split(' ')
+      .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+      .join(' ');
+
+  String _formatTime(String raw) {
+    if (raw.isEmpty) return '';
+    // D1 stores UTC as "2026-09-30 10:00:00" (no timezone suffix).
+    final iso = raw.contains('T') || raw.contains('Z')
+        ? raw
+        : '${raw.replaceFirst(' ', 'T')}Z';
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return raw;
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    final hh = dt.hour.toString().padLeft(2, '0');
+    final mm = dt.minute.toString().padLeft(2, '0');
+    return '${dt.day}/${dt.month}/${dt.year} $hh:$mm';
+  }
+
   String _logTitle(Map<String, dynamic> item) {
     final action = '${item['action'] ?? item['kind'] ?? ''}';
-    if (action.isNotEmpty) return action.replaceAll('_', ' ');
+    if (action.isNotEmpty) return _titleCase(action.replaceAll('_', ' '));
     final message = '${item['message'] ?? ''}';
     if (message.isNotEmpty) return message;
     return 'Event';
@@ -67,12 +90,14 @@ class _AdminNotificationsScreenState extends State<AdminNotificationsScreen> {
     final reference = '${item['reference_id'] ?? ''}';
     final amountCents = item['amount_cents'];
     final status = '${item['status'] ?? item['lipila_status'] ?? ''}';
-    final time = '${item['created_at'] ?? ''}';
+    final adminName = '${item['adminName'] ?? item['admin_name'] ?? ''}';
+    final time = _formatTime('${item['created_at'] ?? ''}');
     final parts = <String>[
+      if (adminName.isNotEmpty) 'by $adminName',
       if (entity.isNotEmpty) entity + (entityId.isNotEmpty ? ' #$entityId' : ''),
       if (reference.isNotEmpty) reference,
       if (amountCents is num) 'K ${(amountCents / 100).toStringAsFixed(2)}',
-      if (status.isNotEmpty) status,
+      if (status.isNotEmpty) _titleCase(status),
       if (time.isNotEmpty) time,
     ];
     return parts.join('  ·  ');

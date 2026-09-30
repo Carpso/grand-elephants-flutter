@@ -1,6 +1,6 @@
 # SESSION_STATE — Grand Elephants (Flutter app)
 
-Saved: 2026-09-27. Companion: same file in `grand-elephants-api`.
+Saved: 2026-09-30. Companion: same file in `grand-elephants-api`.
 
 ## Project identity
 - Product: **Grand Elephants** — bags-only marketplace ("Move With Conviction")
@@ -11,14 +11,24 @@ Saved: 2026-09-27. Companion: same file in `grand-elephants-api`.
 - Worker/site: `https://grand-elephants-api.godfreymoseskalambo.workers.dev`
 - D1: `grand-elephants-db` (id `447d1f6c-1b73-4bfd-bea5-3747460acdfc`) — 25 tables, bag seed applied
 - Wrangler auth: OAuth in `C:\Users\User\AppData\Roaming\xdg.config\.wrangler\config\default.toml` — run `npx wrangler` WITHOUT `CLOUDFLARE_API_TOKEN` env (that token lacks workers:edit). Account `ab82a97ce2c926279c483fef36c41945`.
-- Secrets on worker (set, values never stored on disk): `AT_API_KEY` (PRODUCTION, from `OneDrive\Documents\Settings - API Key.txt`), `JWT_SECRET` (`Temp\opencode\jwt_secret.txt`), `LIPILA_API_KEY`, `LIPILA_WEBHOOK_SECRET` (`Temp\opencode\webhook_secret.txt`), `SUPERADMIN_PHONES=+260968551110`, `FIREBASE_PRIVATE_KEY`/`FIREBASE_CLIENT_EMAIL` (`Temp\opencode\firebase_key.pem`).
+- Secrets on worker (set 2026-09-30, 7/7): `AT_API_KEY` (PRODUCTION, from `OneDrive\Documents\Settings - API Key.txt`), `JWT_SECRET` (`Temp\opencode\jwt_secret.txt`), `LIPILA_API_KEY` (from `OneDrive\Documents\lsk_019fc62a-10c9-726a-82ff-03bfdee.txt` line 0 first token — prod `lsk_…`, verified balance 200), `LIPILA_WEBHOOK_SECRET` (`Temp\opencode\webhook_secret.txt`), `SUPERADMIN_PHONES=+260968551110`, `FIREBASE_PRIVATE_KEY`/`FIREBASE_CLIENT_EMAIL` (`Temp\opencode\firebase_key.pem`).
 - SMS: Africa's Talking **production** (`api.africastalking.com`, username `ChurchOnApp`, sender **Carpso** approved, brand `GRANDELEPHANTS:`). `AT_SANDBOX=false` in wrangler.toml. NOTE: keys are environment-specific — sandbox keys 401 on prod host.
 - GitHub: remotes `Carpso/grand-elephants-flutter` (branch **main**) and `Carpso/grand-elephants-api` (branch **master**); push via `git push https://Carpso:<PAT>@github.com/...` (PAT in credential history — `ghp_efe3...`).
 - R2: bucket `choa-sermons-vault`, SigV4 script `C:\Users\User\AppData\Local\Temp\opencode\upload_r2.ps1 -Bucket "choa-sermons-vault"` → `https://media.churchonapp.com/grand-elephants/grand-elephants.apk|.aab`.
 - Maps: `https://maps.churchonapp.com/zambia.pmtiles` (PMTiles, OSM fallback).
 - Firebase project `grand-elephants-b8ec4`; google-services.json in android/app.
 
-## Done this session (all pushed)
+## Done this session (2026-09-30, pushed)
+- Admin/Lipila/FX batch across **14 Flutter files** + backend (`src/index.ts`, `src/lipila.ts`); deployed worker+web as `bd203e65`. Gates: analyze 0, tests 13/13 (tests print harmless "Binding has not yet been initialized"), tsc 0.
+- **FX (live, free sources)**: `ConfigProvider` `_loadFx()`/`refreshFx()` → `GET /api/fx` (open.er-api.com, frankfurter, jsdelivr; 6h server cache, persisted last-good); getters `exchangeRate` (=1/usdToZmw), `usdToZmw`, `fxSource`, `fxUpdatedAt`, `fxStale`. Business dashboard FX tile: live rate, `LIVE`/`CACHED` badge, tap-to-refresh.
+- **Config**: `appDescription` (editable in App Settings → `app_description`), `maintenanceMode` parse + `setMaintenanceMode()` (PATCH settings "1"/"0"), feeInfo `deliveryBaseFee`/`deliveryPerKm` (cents→whole) for checkout fee text.
+- **Lipila checkout fixes**: `CartProvider.lastPayment {lipila, feeSummary, paymentMethod}` (server order response shape); **cart kept when `payment_status='failed'`** (was cleared → user lost basket); failed → error toast + return; card → `_showCardPaymentLink` dialog (SelectableText + Clipboard copy — no `url_launcher` dep); success screen has real **Payment Failed → Try Again** state (no Lottie on failure).
+- **Admin screens**: Users (initial spinner, change-role/approve+reject-rider/suspend action sheet, rider status badge), Settings (saving state, description, maintenance toggle via ConfigProvider), Security Logs (`_titleCase`, UTC `Z` + relative times, `adminName` actor), Finance (all `config.formatPrice`, Lipila wallet tile, fresh error toasts), Riders (K20 min gate matching server, formatPrice, payout dialog shows server `netCents`, `payRider`/`processPayout` return fresh errors + reload in finally).
+- **Superadmin dashboard**: formatPrice everywhere, **Lipila + business wallets card** (loadLipilaBalance), menu honesty (Global Settings/Marketing Suite/System Health), Security Logs + Finance links; health modal now `db`/`api`/`runtime` + server latency (no fake PostgreSQL/Redis).
+- **Try-on**: camera state machine (starting / no-camera / permission-denied / retry), **"Upload Photo Instead"** via `image_picker` gallery → AR overlay, disabled "Starting camera…" button, footer `'<appName> · On-device overlay preview'` (removed false "Secured by AI").
+- **Android builds (gotcha!)**: first `flutter build apk|appbundle` silently reused a **stale Sep-24 `libapp.so`** (gradle up-to-date false positive — all artifacts hashed `48F8BA51…`, missing today's code). Fix: back up `build\web` → `flutter clean` → rebuild → restore web. Fresh: `flutter-apk\Grand Elephants.apk` **72.3MB** + `bundle\release\app-release.aab` **59.8MB**, both `libapp.so 9BE957B5…` (9,175,984 B), new strings verified inside APK. Note: flutter renames output to `Grand Elephants.apk` (label has a space). **Not yet uploaded to R2.**
+
+## Done previously (through 2026-09-27, pushed)
 - API `6a5cb84` (master) / Flutter `373943e` (main). analyze 0, 13/13 tests, tsc 0.
 - **Session persistence**: splash awaits `AuthProvider.ready`, provider `lazy:false`, 14-day inactivity reset (wired in HomeShell pointer/resume), navigatorKey logout, `businessId` int→String fix.
 - **Routes**: `/` → HomeShell, `/scan` (home search bar), `/orders/track` (order detail), banner link allowlist, 4 dead screens deleted, `/business/apply`, `/superadmin/dashboard`, `/admin/businesses`, `/business/tax` added+guarded (`teamRoutes`/`adminOnlyRoutes` in main.dart).
@@ -34,13 +44,11 @@ Saved: 2026-09-27. Companion: same file in `grand-elephants-api`.
 - **2026-09-27 gap batch (six gaps closed, E2E green)**: (1) **Release keystore**: `android/app/upload-keystore.jks` (alias `upload`, CN=Grand Elephants) + `android/key.properties` (both gitignored); creds file `OneDrive\Documents\grand-elephants release keystore.txt`; `build.gradle.kts` signs release with it (falls back to debug if file missing). (2) **iOS bundle id** `com.sellonapp.sellOnApp` → `com.grandelephants.shop` (6/6 pbxproj lines). (3) **UploadService** (`lib/services/upload_service.dart`) at all 5 image pickers (product/bike/profile/proof/banner) → `POST /api/upload` → R2 URL, silent fallback to data-URI on failure. (4) **Admin write UI**: banners add/edit/delete (`/admin/banners`), categories delete with 409 toast. (5) **FCM tap-through** in `lib/main.dart`: `onMessageOpenedApp` + `getInitialMessage` → allowlisted route via `navigatorKey`, skipped when logged out. (6) Release APK (69.2MB) + AAB (58.4MB) rebuilt **signed with the release keystore** (apksigner: `CN=Grand Elephants`) and re-uploaded to R2 (`media.churchonapp.com/grand-elephants/…`; ETag matched local MD5 — verify that way after uploads). R2 upload script `Temp\opencode\upload_r2.ps1` defaults to bucket `carpso-assets` which **no longer exists** — always pass `-Bucket choa-sermons-vault`. Server companions: OTP lockout (429 after 5 fails), 401→403 role/scope reclass, banner/category APIs, ZRA VSDC client (config-driven — needs official onboarding + `ZRA_API_KEY`). Gates: analyze 0, tests 13/13. Note: secrets wiped AGAIN 12:40Z (third foreign break) — restored 6/6.
 
 ## Known gaps / next steps
-- iOS bundle id still `com.sellonapp.sellOnApp` in `project.pbxproj` (display name fixed; rename bundle if shipping iOS).
-- Release APK/AAB signed with **debug keystore** — add a release keystore before Play Store.
-- Product images: base64 data URIs stored in D1 (works, but large rows); move to R2 later (add R2 binding + upload endpoint).
-- Banner "Add" is read-only (no banner write endpoint); categories create-only (no delete endpoint).
-- ZRA Smart Invoice: `src/smart_invoice.ts` `submitInvoice()` is a logged no-op TODO — embed real API there.
+- Android APK/AAB (2026-09-30) **not uploaded to R2** yet — `media.churchonapp.com/grand-elephants/` still serves the 2026-09-27 build. Upload with `Temp\opencode\upload_r2.ps1 -Bucket "choa-sermons-vault"`, verify via ETag = local MD5.
+- **Rebuild gotcha**: gradle can report `assembleRelease`/`bundleRelease` up-to-date while reusing an old `libapp.so` → always check `libapp.so` hash/mtime matches across APK+AAB (or `flutter clean` first). `flutter clean` deletes `build\web` — back it up or re-run `flutter build web --release` before any deploy.
+- Maintenance-mode middleware untested at runtime (needs admin JWT); if testing: admins bypass, customers 503, toggle-off propagates ≤60s.
+- ZRA Smart Invoice: `src/smart_invoice.ts` `submitInvoice()` is a logged no-op TODO — embed real API there (+ `ZRA_API_KEY`).
 - Wishlist is local-only (by design per AGENTS.md).
-- FCM: token sent on verifyOtp; no tap-through deep-link routing yet (`onMessageOpenedApp` unused).
 - `flutter_secure_storage` on web is origin-bound (workers.dev vs custom domain = re-login).
 
 ## Key commands

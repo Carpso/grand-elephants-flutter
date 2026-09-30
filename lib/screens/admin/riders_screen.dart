@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/providers/admin_provider.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
 import 'package:grand_elephants/widgets/toast.dart';
@@ -25,20 +26,27 @@ class _RidersScreenState extends State<RidersScreen> {
   }
 
   Future<void> _handlePayout(AdminRider rider) async {
+    final config = context.read<ConfigProvider>();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirm Payout'),
-        content: Text('Pay K ${rider.balance.toStringAsFixed(2)} to ${rider.name}?'),
+        content: Text(
+            'Pay ${config.formatPrice(rider.balance)} to ${rider.name}?'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                await context.read<AdminProvider>().payRider(rider.id);
+                final res = await context.read<AdminProvider>().payRider(rider.id);
                 if (mounted) {
-                  ToastProvider.of(context).show('Payout to ${rider.name} processed.', ToastType.success);
+                  final netCents = res['netCents'];
+                  ToastProvider.of(context).show(
+                    netCents is num
+                        ? 'Payout to ${rider.name} sent — ${context.read<ConfigProvider>().formatPrice(netCents / 100)} net.'
+                        : 'Payout to ${rider.name} processed.',
+                    ToastType.success);
                 }
               } catch (e) {
                 if (mounted) {
@@ -83,6 +91,7 @@ class _RidersScreenState extends State<RidersScreen> {
   @override
   Widget build(BuildContext context) {
     final admin = context.watch<AdminProvider>();
+    final config = context.watch<ConfigProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -134,9 +143,9 @@ class _RidersScreenState extends State<RidersScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              if (_tab == 0) ..._buildRiderList(admin),
+              if (_tab == 0) ..._buildRiderList(admin, config),
               if (_tab == 1) ..._buildApplications(admin),
-              if (_tab == 2) ..._buildPayouts(admin),
+              if (_tab == 2) ..._buildPayouts(admin, config),
             ],
           ),
         ),
@@ -155,7 +164,7 @@ class _RidersScreenState extends State<RidersScreen> {
     );
   }
 
-  List<Widget> _buildRiderList(AdminProvider admin) {
+  List<Widget> _buildRiderList(AdminProvider admin, ConfigProvider config) {
     if (admin.riders.isEmpty) {
       return [
         const Padding(
@@ -219,7 +228,7 @@ class _RidersScreenState extends State<RidersScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text('Wallet Balance', style: TextStyle(color: AppColors.brandMuted, fontWeight: FontWeight.w500, fontSize: 13)),
-                    Text('K ${rider.balance.toStringAsFixed(2)}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
+                    Text(config.formatPrice(rider.balance), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: AppColors.brandDark)),
                   ],
                 ),
               ),
@@ -228,9 +237,10 @@ class _RidersScreenState extends State<RidersScreen> {
                 children: [
                   Expanded(
                     child: SoftButton(
-                      title: 'Payout',
+                      title: rider.balance < 20 ? 'Min K20 to pay' : 'Payout',
                       variant: SoftButtonVariant.primary,
-                      onPressed: rider.balance <= 0 ? null : () => _handlePayout(rider),
+                      onPressed:
+                          rider.balance < 20 ? null : () => _handlePayout(rider),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -296,7 +306,7 @@ class _RidersScreenState extends State<RidersScreen> {
     }).toList();
   }
 
-  List<Widget> _buildPayouts(AdminProvider admin) {
+  List<Widget> _buildPayouts(AdminProvider admin, ConfigProvider config) {
     if (admin.payouts.isEmpty) {
       return const [
         Padding(
@@ -319,7 +329,7 @@ class _RidersScreenState extends State<RidersScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(p.riderName, style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.brandDark)),
-                    Text('K ${p.netCents / 100} net • ${p.createdAt}', style: const TextStyle(fontSize: 12, color: AppColors.brandMuted)),
+                    Text('${config.formatPrice(p.netCents / 100)} net • ${p.createdAt}', style: const TextStyle(fontSize: 12, color: AppColors.brandMuted)),
                   ],
                 ),
               ),

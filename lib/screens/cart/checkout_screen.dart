@@ -56,6 +56,52 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  /// Shows the Lipila hosted-checkout link for card orders (copyable — the
+  /// browser cannot be opened from here without a URL-launcher dependency).
+  Future<void> _showCardPaymentLink(String url, String orderId) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Card Payment Link'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Open this secure link to complete payment for order $orderId.',
+              style: const TextStyle(fontSize: 13, color: AppColors.brandDark),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.softSurface,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SelectableText(
+                url,
+                style: const TextStyle(fontSize: 12, color: AppColors.brandSecondary),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: url));
+              ToastProvider.of(context).show('Payment link copied', ToastType.success);
+            },
+            child: const Text('Copy Link'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _handlePayment() async {
     final cart = context.read<CartProvider>();
 
@@ -95,13 +141,36 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       HapticFeedback.mediumImpact();
 
-      if (_paymentMethod == _PaymentMethod.card) {
+      if (order.paymentStatus == 'failed') {
+        // Lipila rejected the collection — cart was kept, user can retry.
         ToastProvider.of(context).show(
-          'Order placed. Complete card payment from the link sent.',
-          ToastType.info,
+          'Payment could not be started (order ${order.id}). Your cart was kept — please try again.',
+          ToastType.error,
         );
-        Navigator.of(context).pushReplacementNamed('/cart/checkout/success', arguments: order.id);
         return;
+      }
+
+      final lipila = cart.lastPayment?['lipila'] as Map<String, dynamic>?;
+      final cardUrl = lipila?['cardRedirectionUrl']?.toString() ?? '';
+
+      if (_paymentMethod == _PaymentMethod.card) {
+        if (cardUrl.isNotEmpty) {
+          await _showCardPaymentLink(cardUrl, order.id);
+        } else {
+          ToastProvider.of(context).show(
+            'Order placed. Complete card payment from the link sent.',
+            ToastType.info,
+          );
+        }
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed('/cart/checkout/success', arguments: order.id);
+        }
+        return;
+      }
+
+      final promptMsg = lipila?['message']?.toString() ?? '';
+      if (promptMsg.isNotEmpty) {
+        ToastProvider.of(context).show(promptMsg, ToastType.info);
       }
 
       if (_needTaxInvoice) {
@@ -193,7 +262,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Delivery fee: K25 + K10/km · 16% VAT applies on the order total',
+                  'Delivery fee: ${config.formatPrice(config.deliveryBaseFee)} + ${config.formatPrice(config.deliveryPerKm)}/km · ${config.taxRate.toStringAsFixed(0)}% VAT applies on the order total',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade400, fontStyle: FontStyle.italic),
                 ),
               ],
@@ -245,10 +314,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Delivery Fee (est.)', style: TextStyle(color: AppColors.brandMuted)),
+                    Text(
+                      'Delivery Fee (est.)',
+                      style: TextStyle(color: AppColors.brandMuted),
+                    ),
                     Text(
                       config.formatPrice((double.tryParse(_distanceController.text) ?? 0) > 0
-                          ? 25 + (double.tryParse(_distanceController.text) ?? 0) * 10
+                          ? config.deliveryBaseFee +
+                              (double.tryParse(_distanceController.text) ?? 0) *
+                                  config.deliveryPerKm
                           : cart.deliveryFee),
                       style: TextStyle(color: AppColors.textPrimary),
                     ),
@@ -278,7 +352,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Final total incl. 16% VAT and payment fees is quoted on the order.',
+                  'Final total incl. ${config.taxRate.toStringAsFixed(0)}% VAT and payment fees is quoted on the order.',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
               ],

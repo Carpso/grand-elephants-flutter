@@ -20,7 +20,7 @@ class _SystemHealthModalState extends State<SystemHealthModal> {
   final Map<String, String> _statuses = {
     'db': 'checking',
     'api': 'checking',
-    'cache': 'checking',
+    'runtime': 'checking',
   };
   int _latency = 0;
 
@@ -36,7 +36,7 @@ class _SystemHealthModalState extends State<SystemHealthModal> {
     setState(() {
       _statuses['db'] = 'checking';
       _statuses['api'] = 'checking';
-      _statuses['cache'] = 'checking';
+      _statuses['runtime'] = 'checking';
       _latency = 0;
     });
 
@@ -44,18 +44,25 @@ class _SystemHealthModalState extends State<SystemHealthModal> {
     ApiClient.instance.get('/api/health', withAuth: false).then((res) {
       stopwatch.stop();
       if (!mounted) return;
-      var db = 'online';
-      var api = 'online';
-      var cache = 'online';
+      var db = 'offline';
+      var api = 'offline';
+      var runtime = 'offline';
       if (res is Map<String, dynamic>) {
         db = _deriveStatus(res['db'], db);
-        cache = _deriveStatus(res['cache'], cache);
+        api = _deriveStatus(res['ok'], api);
+        // Getting any response back means the edge worker is serving.
+        runtime = 'online';
+        final serverLatency = res['latencyMs'];
+        _latency = serverLatency is num
+            ? serverLatency.toInt()
+            : stopwatch.elapsedMilliseconds;
+      } else {
+        _latency = stopwatch.elapsedMilliseconds;
       }
       setState(() {
         _statuses['db'] = db;
         _statuses['api'] = api;
-        _statuses['cache'] = cache;
-        _latency = stopwatch.elapsedMilliseconds;
+        _statuses['runtime'] = runtime;
       });
     }).catchError((_) {
       stopwatch.stop();
@@ -63,7 +70,7 @@ class _SystemHealthModalState extends State<SystemHealthModal> {
       setState(() {
         _statuses['db'] = 'offline';
         _statuses['api'] = 'offline';
-        _statuses['cache'] = 'offline';
+        _statuses['runtime'] = 'offline';
         _latency = stopwatch.elapsedMilliseconds;
       });
     });
@@ -177,11 +184,11 @@ class _SystemHealthModalState extends State<SystemHealthModal> {
       padding: const EdgeInsets.all(24),
       child: Column(
         children: [
-          _StatusRow(label: 'Main Database (PostgreSQL)', status: _statuses['db']!),
+          _StatusRow(label: 'D1 Database (SQLite)', status: _statuses['db']!),
           const SizedBox(height: 12),
           _StatusRow(label: 'API Gateway (REST)', status: _statuses['api']!),
           const SizedBox(height: 12),
-          _StatusRow(label: 'Redis Cache Cluster', status: _statuses['cache']!),
+          _StatusRow(label: 'Worker Runtime (Edge)', status: _statuses['runtime']!),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -190,7 +197,7 @@ class _SystemHealthModalState extends State<SystemHealthModal> {
               const SizedBox(width: 8),
               Text.rich(
                 TextSpan(
-                  text: 'Global Latency: ',
+                  text: 'Server Latency: ',
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF6B7280),

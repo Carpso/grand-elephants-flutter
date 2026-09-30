@@ -16,12 +16,14 @@ class UsersScreen extends StatefulWidget {
 
 class _UsersScreenState extends State<UsersScreen> {
   String _query = '';
+  bool _initialLoading = true;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<AdminProvider>().loadUsers();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await context.read<AdminProvider>().loadUsers();
+      if (mounted) setState(() => _initialLoading = false);
     });
   }
 
@@ -37,22 +39,55 @@ class _UsersScreenState extends State<UsersScreen> {
       'admin',
       if (auth.role == 'superadmin') 'superadmin',
     ];
-    final role = await showDialog<String>(
+    final actions = <String, Future<void> Function()>{
+      'Change role…': () async {
+        final role = await showDialog<String>(
+          context: context,
+          builder: (ctx) => SimpleDialog(
+            title: Text('Set role for ${user.name}'),
+            children: roles
+                .map((r) => SimpleDialogOption(
+                      onPressed: () => Navigator.pop(ctx, r),
+                      child: Text(r.toUpperCase()),
+                    ))
+                .toList(),
+          ),
+        );
+        if (role == null || role == user.role) return;
+        await admin.updateUser(user.uid, role: role);
+        if (mounted) ToastProvider.of(context).show('Role updated to $role', ToastType.success);
+      },
+      if (user.riderStatus == 'pending') ...{
+        'Approve rider': () async {
+          await admin.updateUser(user.uid, riderStatus: 'approved');
+          if (mounted) ToastProvider.of(context).show('${user.name} approved as rider', ToastType.success);
+        },
+        'Reject rider': () async {
+          await admin.updateUser(user.uid, riderStatus: 'rejected');
+          if (mounted) ToastProvider.of(context).show('${user.name} rider access rejected', ToastType.info);
+        },
+      } else if (user.role == 'rider' || user.riderStatus == 'approved') ...{
+        'Suspend rider': () async {
+          await admin.updateUser(user.uid, riderStatus: 'rejected');
+          if (mounted) ToastProvider.of(context).show('${user.name} suspended from riding', ToastType.info);
+        },
+      },
+    };
+    final chosen = await showDialog<String>(
       context: context,
       builder: (ctx) => SimpleDialog(
-        title: Text('Set role for ${user.name}'),
-        children: roles
-            .map((r) => SimpleDialogOption(
-                  onPressed: () => Navigator.pop(ctx, r),
-                  child: Text(r.toUpperCase()),
+        title: Text(user.name),
+        children: actions.keys
+            .map((label) => SimpleDialogOption(
+                  onPressed: () => Navigator.pop(ctx, label),
+                  child: Text(label),
                 ))
             .toList(),
       ),
     );
-    if (role == null || role == user.role) return;
+    if (chosen == null) return;
     try {
-      await admin.updateUser(user.uid, role: role);
-      if (mounted) ToastProvider.of(context).show('Role updated to $role', ToastType.success);
+      await actions[chosen]!();
     } catch (e) {
       if (mounted) ToastProvider.of(context).show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
     }
@@ -92,8 +127,10 @@ class _UsersScreenState extends State<UsersScreen> {
           ),
           Expanded(
             child: RefreshIndicator(
-              onRefresh: () => admin.loadUsers(),
-              child: users.isEmpty
+              onRefresh: () async => context.read<AdminProvider>().loadUsers(),
+              child: _initialLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : users.isEmpty
                   ? ListView(
                       children: [
                         const SizedBox(height: 120),
@@ -142,10 +179,36 @@ class _UsersScreenState extends State<UsersScreen> {
                                     children: [
                                       Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.brandDark)),
                                       Text(user.phone, style: const TextStyle(color: AppColors.brandMuted, fontSize: 12)),
-                                      Text(user.email, style: const TextStyle(color: AppColors.brandMuted, fontSize: 11)),
+                                      if (user.email.isNotEmpty)
+                                        Text(user.email, style: const TextStyle(color: AppColors.brandMuted, fontSize: 11)),
                                     ],
                                   ),
                                 ),
+                                if (user.riderStatus != 'none')
+                                  Container(
+                                    margin: const EdgeInsets.only(right: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                    decoration: BoxDecoration(
+                                      color: user.riderStatus == 'approved'
+                                          ? Colors.green[50]
+                                          : user.riderStatus == 'rejected'
+                                              ? Colors.red[50]
+                                              : Colors.orange[50],
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      'RIDER: ${user.riderStatus.toUpperCase()}',
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: user.riderStatus == 'approved'
+                                            ? Colors.green
+                                            : user.riderStatus == 'rejected'
+                                                ? Colors.red
+                                                : Colors.orange[800],
+                                      ),
+                                    ),
+                                  ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(

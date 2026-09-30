@@ -73,6 +73,7 @@ class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
   @override
   Widget build(BuildContext context) {
     final paid = _order?.paymentStatus == 'successful';
+    final failed = _order?.paymentStatus == 'failed';
     final status = _order?.status ?? 'Pending';
 
     return Scaffold(
@@ -90,10 +91,15 @@ class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
                         'https://assets2.lottiefiles.com/packages/lf20_5tl1xxnb.json',
                         repeat: true,
                       )
-                    : Lottie.network(
-                        'https://assets2.lottiefiles.com/packages/lf20_u4yrau.json',
-                        repeat: false,
-                      ),
+                    : failed
+                        ? const Center(
+                            child: Icon(Icons.error_outline,
+                                size: 120, color: AppColors.error),
+                          )
+                        : Lottie.network(
+                            'https://assets2.lottiefiles.com/packages/lf20_u4yrau.json',
+                            repeat: false,
+                          ),
               ).animate().scale(
                     begin: const Offset(0.8, 0.8),
                     duration: 600.ms,
@@ -107,11 +113,13 @@ class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
                         ? 'Awaiting Payment'
                         : paid
                             ? 'Order Confirmed!'
-                            : 'Order Placed',
+                            : failed
+                                ? 'Payment Failed'
+                                : 'Order Placed',
                     style: TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
-                      color: AppColors.brandDark,
+                      color: failed ? AppColors.error : AppColors.brandDark,
                     ),
                     textAlign: TextAlign.center,
                   ),
@@ -130,14 +138,30 @@ class _CheckoutSuccessScreenState extends State<CheckoutSuccessScreen> {
                     child: Text(
                       _pending
                           ? 'A payment prompt was sent to your phone. Approve it and this screen will update automatically.'
-                          : paid
-                              ? 'Thank you for your purchase. Status: $status'
-                              : 'Your order was placed. Status: $status',
+                          : failed
+                              ? 'We could not start your mobile money payment. Your cart was kept — go back to checkout and try again.'
+                              : paid
+                                  ? 'Thank you for your purchase. Status: $status'
+                                  : 'Your order was placed. Status: $status',
                       style: TextStyle(color: AppColors.brandMuted),
                       textAlign: TextAlign.center,
                     ),
                   ),
                   const SizedBox(height: 48),
+                  if (failed) ...[
+                    SizedBox(
+                      width: double.infinity,
+                      child: SoftButton(
+                        title: 'Try Again',
+                        variant: SoftButtonVariant.primary,
+                        icon: const Icon(Icons.refresh, size: 20, color: Colors.white),
+                        onPressed: () {
+                          Navigator.of(context).pushReplacementNamed('/cart/checkout');
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   SizedBox(
                     width: double.infinity,
                     child: SoftButton(

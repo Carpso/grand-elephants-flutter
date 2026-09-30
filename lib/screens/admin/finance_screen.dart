@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/providers/admin_provider.dart';
+import 'package:grand_elephants/providers/config_provider.dart';
 import 'package:grand_elephants/services/api_client.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
@@ -41,15 +42,18 @@ class _FinanceScreenState extends State<FinanceScreen> {
   Future<void> _handleProcessPayout(AdminPayout payout) async {
     final messenger = ToastProvider.of(context);
     try {
-      final status = await context.read<AdminProvider>().processPayout(payout.id);
+      final res = await context.read<AdminProvider>().processPayout(payout.id);
       if (!mounted) return;
+      final status = '${res['status'] ?? 'processing'}';
+      final error = res['error']?.toString();
       if (status == 'successful') {
         messenger.show('Payout ${payout.id} settled successfully.', ToastType.success);
       } else if (status == 'failed') {
         messenger.show(
-            payout.error ?? 'Payout ${payout.id} failed at Lipila', ToastType.error);
+            (error != null && error.isNotEmpty) ? error : 'Payout ${payout.id} failed at Lipila',
+            ToastType.error);
       } else {
-        messenger.show('Payout ${payout.id} is now $status.', ToastType.info);
+        messenger.show('Payout ${payout.id} is still $status — try again later.', ToastType.info);
       }
     } catch (e) {
       if (!mounted) return;
@@ -89,20 +93,13 @@ class _FinanceScreenState extends State<FinanceScreen> {
     }
   }
 
-  String _formatCents(int cents) {
-    final amount = cents / 100;
-    final parts = amount.toStringAsFixed(2).split('.');
-    final buf = StringBuffer();
-    for (var i = 0; i < parts[0].length; i++) {
-      if (i > 0 && (parts[0].length - i) % 3 == 0) buf.write(',');
-      buf.write(parts[0][i]);
-    }
-    return 'K ${buf.toString()}.${parts[1]}';
-  }
+  String _formatCents(int cents) =>
+      context.read<ConfigProvider>().formatPrice(cents / 100);
 
   @override
   Widget build(BuildContext context) {
     final admin = context.watch<AdminProvider>();
+    final config = context.watch<ConfigProvider>();
     final stats = admin.stats;
     final payouts = admin.payouts;
     final businessPayouts = admin.businessPayouts;
@@ -164,7 +161,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
                 children: [
                   Expanded(
                     child: _buildStatTile(
-                        Icons.savings, 'K ${lipilaBalance.toStringAsFixed(2)}', 'LIPILA WALLET'),
+                        Icons.savings, config.formatPrice(lipilaBalance), 'LIPILA WALLET'),
                   ),
                   const SizedBox(width: 8),
                   Expanded(

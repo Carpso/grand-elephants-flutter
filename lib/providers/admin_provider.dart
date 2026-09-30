@@ -286,28 +286,32 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> payRider(String riderId) async {
+  Future<Map<String, dynamic>> payRider(String riderId) async {
     try {
-      await ApiClient.instance.post('/api/admin/riders/$riderId/payout', body: {});
-      await loadRiders();
+      final res = await ApiClient.instance.post('/api/admin/riders/$riderId/payout', body: {});
+      return Map<String, dynamic>.from(res as Map);
     } catch (e) {
       debugPrint('Pay rider failed: $e');
       rethrow;
+    } finally {
+      // Always refresh — on failure the server restored the rider balance.
+      await loadRiders();
     }
   }
 
-  /// Re-checks a payout against Lipila and returns the settled status so the
-  /// caller can toast what actually happened.
-  Future<String> processPayout(String payoutId) async {
+  /// Re-checks a payout against Lipila and returns the fresh status + error so
+  /// the caller toasts what actually happened (not the stale row).
+  Future<Map<String, dynamic>> processPayout(String payoutId) async {
     try {
       final res =
           await ApiClient.instance.post('/api/admin/payouts/$payoutId/process', body: {});
-      await loadPayouts();
-      await loadStats();
-      return '${(res as Map<String, dynamic>)['status'] ?? 'processing'}';
+      return Map<String, dynamic>.from(res as Map);
     } catch (e) {
       debugPrint('Process payout failed: $e');
       rethrow;
+    } finally {
+      await loadPayouts();
+      await loadStats();
     }
   }
 

@@ -22,6 +22,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   late TextEditingController _logoController;
   late TextEditingController _taxController;
   bool _maintenance = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -65,7 +66,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   }
 
   Future<void> _handleSave() async {
+    if (_saving) return;
     final messenger = ToastProvider.of(context);
+    setState(() => _saving = true);
     try {
       final config = context.read<ConfigProvider>();
       await config.updateAppIdentity(
@@ -83,6 +86,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       if (!mounted) return;
       final persisted = cfg['appName'] == _nameController.text &&
           cfg['appSlogan'] == _sloganController.text &&
+          cfg['appDescription'] == _descriptionController.text &&
           '${cfg['appLogo'] ?? ''}' == _logoController.text;
       if (persisted) {
         messenger.show('Configuration Saved Successfully', ToastType.success);
@@ -96,6 +100,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       if (!mounted) return;
       messenger
           .show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -103,19 +109,16 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     final messenger = ToastProvider.of(context);
     final previous = _maintenance;
     setState(() => _maintenance = next);
-    try {
-      await ApiClient.instance.patch('/api/admin/settings', body: {
-        'maintenance_mode': next ? '1' : '0',
-      });
-      if (mounted) {
-        messenger.show(next
-            ? 'Maintenance flag enabled and stored.'
-            : 'Maintenance flag disabled.', ToastType.success);
-      }
-    } catch (e) {
-      if (!mounted) return;
+    final config = context.read<ConfigProvider>();
+    final ok = await config.setMaintenanceMode(next);
+    if (!mounted) return;
+    if (ok) {
+      messenger.show(next
+          ? 'Maintenance ON — customers now see a 503 for all API calls (admins still pass).'
+          : 'Maintenance OFF — normal traffic resumed.', ToastType.success);
+    } else {
       setState(() => _maintenance = previous);
-      messenger.show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      messenger.show('Could not persist maintenance mode', ToastType.error);
     }
   }
 
@@ -207,7 +210,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                               ),
                               const SizedBox(height: 4),
                               const Text(
-                                'Stored flag for the platform — the superadmin console reads it live from the settings API.',
+                                'Blocks all customer API traffic with a 503 while admin sessions keep working.',
                                 style: TextStyle(color: AppColors.brandMuted, fontSize: 12),
                               ),
                             ],
@@ -284,9 +287,9 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           ),
           const SizedBox(height: 24),
           SoftButton(
-            title: 'Save Changes',
+            title: _saving ? 'Saving...' : 'Save Changes',
             variant: SoftButtonVariant.primary,
-            onPressed: _handleSave,
+            onPressed: _saving ? null : _handleSave,
           ),
           const SizedBox(height: 80),
           ],

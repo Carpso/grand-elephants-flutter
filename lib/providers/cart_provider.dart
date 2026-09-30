@@ -139,7 +139,10 @@ class CartProvider extends ChangeNotifier {
   /// Places the order server-side (payment collected via Lipila server webhook).
   /// [tpin] is the optional buyer ZRA TPIN — exactly 10 digits, already
   /// normalised by the checkout screen.
-  /// Returns the server order and clears the cart on success.
+  /// Returns the server order; the cart is cleared only when the payment
+  /// request actually went out (pending/successful) — on a Lipila failure the
+  /// cart is kept so the buyer can retry.
+  Map<String, dynamic>? lastPayment;
   Future<Order?> submitOrder({
     required String paymentMethod,
     required String deliveryAddress,
@@ -167,12 +170,19 @@ class CartProvider extends ChangeNotifier {
     final res = await ApiClient.instance.post('/api/orders', body: payload);
     final json = res as Map<String, dynamic>;
     final order = Order.fromJson(json['order'] as Map<String, dynamic>);
+    lastPayment = {
+      'lipila': json['lipila'],
+      'feeSummary': json['feeSummary'],
+      'paymentMethod': json['paymentMethod'],
+    };
 
     _orders.insert(0, order);
-    _items.clear();
-    _isDirty = true;
+    if (order.paymentStatus != 'failed') {
+      _items.clear();
+      _isDirty = true;
+      await _persistCart();
+    }
     await _persistOrders();
-    await _persistCart();
     notifyListeners();
     return order;
   }
