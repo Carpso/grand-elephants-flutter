@@ -262,7 +262,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Delivery fee: ${config.formatPrice(config.deliveryBaseFee)} + ${config.formatPrice(config.deliveryPerKm)}/km · ${config.taxRate.toStringAsFixed(0)}% VAT applies on the order total',
+                  'Delivery fee: ${config.formatPrice(config.deliveryBaseFee)} + ${config.formatPrice(config.deliveryPerKm)}/km · ${config.taxRate.toStringAsFixed(0)}% VAT applies on the order total · Payment fee ${config.paymentFeePct.toStringAsFixed(1)}% (min K${config.paymentFeeMin.toStringAsFixed(0)}) for MoMo or ${config.cardPaymentFeePct.toStringAsFixed(1)}% (min K${config.cardPaymentFeeMin.toStringAsFixed(0)}) for card',
                   style: TextStyle(fontSize: 12, color: Colors.grey.shade400, fontStyle: FontStyle.italic),
                 ),
               ],
@@ -352,7 +352,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Final total incl. ${config.taxRate.toStringAsFixed(0)}% VAT and payment fees is quoted on the order.',
+                  'Final total incl. ${config.taxRate.toStringAsFixed(0)}% VAT and the payment fee (${config.paymentFeePct.toStringAsFixed(1)}% MoMo / ${config.cardPaymentFeePct.toStringAsFixed(1)}% card) is quoted on the order.',
                   style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
                 ),
               ],

@@ -20,13 +20,20 @@ class _FinanceScreenState extends State<FinanceScreen> {
   final _baseFeeController = TextEditingController(text: '25.00');
   final _perKmController = TextEditingController(text: '5.00');
   final _vatController = TextEditingController(text: '16');
-  final _commissionController = TextEditingController(text: '15');
+  final _commissionController = TextEditingController(text: '1');
+  final _platformMinController = TextEditingController(text: '3.00');
+  final _cardPctController = TextEditingController(text: '2');
+  final _cardMinController = TextEditingController(text: '5.00');
+  final _payoutPctController = TextEditingController(text: '1');
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      _loadSettings();
+    });
   }
 
   Future<void> _load() async {
@@ -37,6 +44,39 @@ class _FinanceScreenState extends State<FinanceScreen> {
       admin.loadLipilaBalance(),
       admin.loadPayouts(),
     ]);
+  }
+
+  /// Pre-fills the fee inputs from GET /api/admin/settings (missing keys keep
+  /// the defaults above).
+  Future<void> _loadSettings() async {
+    try {
+      final res = await ApiClient.instance.get('/api/admin/settings');
+      final map = Map<String, dynamic>.from(res as Map);
+      String textOf(String key) {
+        final v = map[key];
+        return v == null ? '' : v.toString();
+      }
+
+      void setText(TextEditingController c, String v) {
+        if (v.isNotEmpty) c.text = v;
+      }
+
+      void setKwacha(TextEditingController c, String centsRaw) {
+        final cents = double.tryParse(centsRaw);
+        if (cents != null) c.text = (cents / 100).toStringAsFixed(2);
+      }
+
+      setText(_vatController, textOf('vat_pct'));
+      setText(_commissionController, textOf('platform_commission_pct'));
+      setText(_cardPctController, textOf('platform_card_fee_pct'));
+      setText(_payoutPctController, textOf('platform_payout_fee_pct'));
+      setKwacha(_baseFeeController, textOf('delivery_base_fee_cents'));
+      setKwacha(_perKmController, textOf('delivery_per_km_cents'));
+      setKwacha(_platformMinController, textOf('platform_min_fee_cents'));
+      setKwacha(_cardMinController, textOf('platform_card_min_fee_cents'));
+    } catch (_) {
+      // Keep the defaults when settings are unreachable.
+    }
   }
 
   Future<void> _handleProcessPayout(AdminPayout payout) async {
@@ -67,12 +107,18 @@ class _FinanceScreenState extends State<FinanceScreen> {
     _perKmController.dispose();
     _vatController.dispose();
     _commissionController.dispose();
+    _platformMinController.dispose();
+    _cardPctController.dispose();
+    _cardMinController.dispose();
+    _payoutPctController.dispose();
     super.dispose();
   }
 
   Future<void> _handleSaveRates() async {
     final baseFee = double.tryParse(_baseFeeController.text) ?? 0;
     final perKm = double.tryParse(_perKmController.text) ?? 0;
+    final platformMin = double.tryParse(_platformMinController.text) ?? 0;
+    final cardMin = double.tryParse(_cardMinController.text) ?? 0;
     setState(() => _saving = true);
     try {
       await ApiClient.instance.patch('/api/admin/settings', body: {
@@ -80,6 +126,10 @@ class _FinanceScreenState extends State<FinanceScreen> {
         'delivery_per_km_cents': (perKm * 100).round(),
         'vat_pct': _vatController.text,
         'platform_commission_pct': _commissionController.text,
+        'platform_min_fee_cents': (platformMin * 100).round(),
+        'platform_card_fee_pct': _cardPctController.text,
+        'platform_card_min_fee_cents': (cardMin * 100).round(),
+        'platform_payout_fee_pct': _payoutPctController.text,
       });
       if (mounted) {
         ToastProvider.of(context).show('New financial configurations have been applied globally.', ToastType.success);
@@ -151,7 +201,7 @@ class _FinanceScreenState extends State<FinanceScreen> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Expanded(child: _buildStatTile(Icons.percent, _formatCents(stats.platformCommissionCents), 'PLATFORM COMMISSION')),
+                  Expanded(child: _buildStatTile(Icons.percent, _formatCents(stats.platformCommissionCents), 'PLATFORM FEES')),
                   const SizedBox(width: 8),
                   Expanded(child: _buildStatTile(Icons.pending_actions, '${stats.pendingPayouts}', 'PENDING PAYOUTS')),
                 ],
@@ -210,8 +260,46 @@ class _FinanceScreenState extends State<FinanceScreen> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: SoftInput(
-                            label: 'Platform Commission (%)',
+                            label: 'Platform Fee (%)',
                             controller: _commissionController,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SoftInput(
+                            label: 'Platform Min Fee (K)',
+                            controller: _platformMinController,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SoftInput(
+                            label: 'Card Fee (%)',
+                            controller: _cardPctController,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SoftInput(
+                            label: 'Card Min Fee (K)',
+                            controller: _cardMinController,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SoftInput(
+                            label: 'Payout Fee (%)',
+                            controller: _payoutPctController,
                             keyboardType: TextInputType.number,
                           ),
                         ),

@@ -54,6 +54,11 @@ class ConfigProvider extends ChangeNotifier {
   double _taxRate = 16.0;
   double _deliveryBaseFee = 25;
   double _deliveryPerKm = 10;
+  // Buyer payment fee (platform cut + Lipila fee): MoMo 3.5% min K3, card 4.5% min K5.
+  double _paymentFeePct = 3.5;
+  double _paymentFeeMin = 3;
+  double _cardPaymentFeePct = 4.5;
+  double _cardPaymentFeeMin = 5;
   bool _maintenanceMode = false;
 
   String get appName => _appName;
@@ -71,6 +76,10 @@ class ConfigProvider extends ChangeNotifier {
   double get taxRate => _taxRate;
   double get deliveryBaseFee => _deliveryBaseFee;
   double get deliveryPerKm => _deliveryPerKm;
+  double get paymentFeePct => _paymentFeePct;
+  double get paymentFeeMin => _paymentFeeMin;
+  double get cardPaymentFeePct => _cardPaymentFeePct;
+  double get cardPaymentFeeMin => _cardPaymentFeeMin;
   bool get maintenanceMode => _maintenanceMode;
   List<Map<String, dynamic>> get homeBanners => _homeBanners;
 
@@ -121,6 +130,14 @@ class ConfigProvider extends ChangeNotifier {
             ((num.tryParse('${feeInfo['deliveryBaseFeeCents']}')?.toDouble() ?? _deliveryBaseFee * 100)) / 100;
         _deliveryPerKm =
             ((num.tryParse('${feeInfo['deliveryPerKmCents']}')?.toDouble() ?? _deliveryPerKm * 100)) / 100;
+        _paymentFeePct =
+            num.tryParse('${feeInfo['momoFeePct']}')?.toDouble() ?? _paymentFeePct;
+        _paymentFeeMin =
+            ((num.tryParse('${feeInfo['momoFeeMinCents']}')?.toDouble() ?? _paymentFeeMin * 100)) / 100;
+        _cardPaymentFeePct =
+            num.tryParse('${feeInfo['cardFeePct']}')?.toDouble() ?? _cardPaymentFeePct;
+        _cardPaymentFeeMin =
+            ((num.tryParse('${feeInfo['cardFeeMinCents']}')?.toDouble() ?? _cardPaymentFeeMin * 100)) / 100;
       }
       notifyListeners();
     } catch (e) {
