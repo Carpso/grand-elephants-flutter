@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/models/product.dart';
+import 'package:grand_elephants/providers/auth_provider.dart';
 import 'package:grand_elephants/screens/admin/add_product_screen.dart';
 import 'package:grand_elephants/services/api_client.dart';
 import 'package:grand_elephants/widgets/product_image.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
 import 'package:grand_elephants/widgets/toast.dart';
+import 'package:provider/provider.dart';
 
 class InventoryScreen extends StatefulWidget {
   const InventoryScreen({super.key});
@@ -18,6 +20,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
   List<Product> _products = [];
   String? _error;
 
+  /// Admins/superadmins manage every business's products; shop teams are
+  /// scoped to their own business (server falls back to the platform shop).
+  String get _base {
+    final role = context.read<AuthProvider>().role;
+    return (role == 'admin' || role == 'superadmin')
+        ? '/api/admin/products'
+        : '/api/businesses/me/products';
+  }
+
   @override
   void initState() {
     super.initState();
@@ -26,7 +37,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   Future<void> _load() async {
     try {
-      final res = await ApiClient.instance.get('/api/admin/products');
+      final res = await ApiClient.instance.get(_base);
       if (mounted) {
         setState(() {
           _products = (res as List)
@@ -69,7 +80,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
     if (confirmed != true || !mounted) return;
     try {
-      await ApiClient.instance.delete('/api/admin/products/${product.id}');
+      await ApiClient.instance.delete('$_base/${product.id}');
       await _load();
       if (mounted) {
         ToastProvider.of(context).show('${product.name} deleted.', ToastType.success);
@@ -121,7 +132,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
     if (saved != true || !mounted) return;
     try {
-      await ApiClient.instance.put('/api/admin/products/${product.id}', body: {
+      await ApiClient.instance.put('$_base/${product.id}', body: {
         'name': nameController.text,
         'price': double.tryParse(priceController.text) ?? product.price,
         'stock': int.tryParse(stockController.text) ?? product.stock,

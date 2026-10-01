@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:grand_elephants/constants/app_theme.dart';
 import 'package:grand_elephants/models/cart_item.dart';
 import 'package:grand_elephants/providers/cart_provider.dart';
+import 'package:grand_elephants/services/api_client.dart';
 import 'package:grand_elephants/widgets/hosted_map.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
@@ -21,6 +23,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Order? _order;
   bool _loading = true;
   String? _error;
+  String? _shareUrl;
 
   static const List<String> _flow = [
     'Pending',
@@ -41,7 +44,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   };
 
   String get _orderId {
-    return ModalRoute.of(context)?.settings.arguments as String? ?? '';
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) return '${args['orderId'] ?? ''}';
+    return args as String? ?? '';
+  }
+
+  /// Signature when opened from a signed share link (public, no login).
+  String? get _sig {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) return args['sig'] as String?;
+    return null;
   }
 
   @override
@@ -52,6 +64,29 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
   Future<void> _load() async {
     var id = _orderId;
+    final sig = _sig;
+    if (id.isNotEmpty && sig != null && sig.isNotEmpty) {
+      // Signed tracking link: public redacted payload, no session needed.
+      try {
+        final res = await ApiClient.instance
+            .get('/api/orders/$id/tracking?sig=$sig', withAuth: false);
+        final json = (res as Map)['order'] as Map<String, dynamic>?;
+        if (!mounted) return;
+        setState(() {
+          _order = json == null ? null : Order.fromJson(json);
+          _shareUrl = json?['trackingUrl'] as String?;
+          _loading = false;
+          if (_order == null) _error = 'Order not found';
+        });
+      } catch (e) {
+        if (!mounted) return;
+        setState(() {
+          _error = '$e'.replaceFirst('Exception: ', '');
+          _loading = false;
+        });
+      }
+      return;
+    }
     if (id.isEmpty) {
       final cart = context.read<CartProvider>();
       if (cart.orders.isNotEmpty) id = cart.orders.first.id;
@@ -71,6 +106,29 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       _order = order;
       _loading = false;
     });
+  }
+
+  /// Copies the shareable tracking link (server-signed, works for anyone).
+  Future<void> _share() async {
+    final messenger = ToastProvider.of(context);
+    var url = _shareUrl;
+    try {
+      if (url == null || url.isEmpty) {
+        final id = _orderId;
+        if (id.isEmpty) throw Exception('No order selected');
+        final res = await ApiClient.instance.get('/api/orders/$id/tracking-link');
+        url = (res as Map)['url']?.toString();
+      }
+      if (url == null || url.isEmpty) throw Exception('Could not build the link');
+      await Clipboard.setData(ClipboardData(text: url));
+      if (mounted) {
+        messenger.show('Tracking link copied — paste it into a chat or SMS.', ToastType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    }
   }
 
   Future<void> _cancelOrder() async {
@@ -112,6 +170,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(order != null ? 'Track Order #${order.id}' : 'Track Order'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: IconButton(
+              icon: const Icon(Icons.share, size: 20),
+              tooltip: 'Copy tracking link',
+              onPressed: _share,
+            ),
+          ),
+        ],
       ),
       body: _loading
           ? const Center(
@@ -163,7 +231,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                       child: SoftButton(
                         title: 'Cancel Order',
                         variant: SoftButtonVariant.ghost,
-                        onPressed: order.isCancellable ? _cancelOrder : null,
+                        onPressed:
+                            (order.isCancellable && _sig == null) ? _cancelOrder : null,
                       ),
                     ),
                   ],

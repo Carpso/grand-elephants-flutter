@@ -41,6 +41,7 @@ import 'screens/rider/apply_screen.dart';
 import 'screens/business/business_apply_screen.dart';
 import 'screens/business/business_home_screen.dart';
 import 'screens/business/business_dashboard_screen.dart';
+import 'screens/business/business_staff_screen.dart';
 import 'screens/business/tax_screen.dart';
 import 'screens/employee/employee_stock_screen.dart';
 import 'screens/admin/admin_home_screen.dart';
@@ -102,7 +103,9 @@ final Map<String, WidgetBuilder> appRoutes = <String, WidgetBuilder>{
   '/business/home': (_) => const BusinessHomeScreen(),
   '/business/tax': (_) => const TaxScreen(),
   '/business/collection-numbers': (_) => const CollectionNumbersScreen(),
+  '/business/products': (_) => const InventoryScreen(),
   '/business/products/add': (_) => const AddProductScreen(),
+  '/business/staff': (_) => const BusinessStaffScreen(),
   '/employee/stock': (_) => const EmployeeStockScreen(),
   '/admin': (_) => const AdminHomeScreen(),
   '/admin/businesses': (_) => const BusinessesScreen(),
@@ -127,6 +130,8 @@ final Map<String, WidgetBuilder> appRoutes = <String, WidgetBuilder>{
 /// an entry in [appRoutes] or one of the id-bearing detail routes that
 /// `onGenerateRoute` builds from a path segment.
 bool isKnownAppRoute(String route) {
+  final qi = route.indexOf('?');
+  if (qi != -1) route = route.substring(0, qi);
   if (appRoutes.containsKey(route)) return true;
   if (route.startsWith('/product/')) return route.length > '/product/'.length;
   if (route.startsWith('/orders/')) return route.length > '/orders/'.length;
@@ -261,8 +266,16 @@ class SellOnApp extends StatelessWidget {
         themeMode: ThemeMode.system,
         initialRoute: '/splash',
         onGenerateRoute: (settings) {
-          if (settings.name != null && settings.name!.isNotEmpty) {
-            currentRouteName = settings.name!;
+          // Hash-links can carry a query (e.g. /orders/track?orderId=..&sig=..).
+          var path = settings.name ?? '';
+          String? query;
+          final qi = path.indexOf('?');
+          if (qi != -1) {
+            query = path.substring(qi + 1);
+            path = path.substring(0, qi);
+          }
+          if (path.isNotEmpty) {
+            currentRouteName = path;
           }
 
           final adminOnlyRoutes = {
@@ -285,7 +298,7 @@ class SellOnApp extends StatelessWidget {
             '/superadmin/dashboard',
           };
 
-          if (adminOnlyRoutes.contains(settings.name)) {
+          if (adminOnlyRoutes.contains(path)) {
             final auth = Provider.of<AuthProvider>(context, listen: false);
             final role = auth.role;
             if (role != 'admin' && role != 'superadmin') {
@@ -304,10 +317,12 @@ class SellOnApp extends StatelessWidget {
             '/business/home',
             '/business/tax',
             '/business/collection-numbers',
+            '/business/products',
             '/business/products/add',
+            '/business/staff',
             '/employee/stock',
           };
-          if (teamRoutes.contains(settings.name)) {
+          if (teamRoutes.contains(path)) {
             final auth = Provider.of<AuthProvider>(context, listen: false);
             const allowed = {'business', 'employee', 'admin', 'superadmin'};
             if (!allowed.contains(auth.role)) {
@@ -319,23 +334,36 @@ class SellOnApp extends StatelessWidget {
             }
           }
 
-          final builder = appRoutes[settings.name];
-          if (builder != null) return MaterialPageRoute(builder: builder, settings: settings);
-
-          if (settings.name != null && settings.name!.startsWith('/product/')) {
-            final id = settings.name!.split('/').last;
+          // Signed tracking link: /orders/track?orderId=..&sig=.. (public, no auth).
+          if (path == '/orders/track' && query != null && query.isNotEmpty) {
             return MaterialPageRoute(
-              builder: (_) => ProductDetailScreen(productId: id),
-              settings: settings,
+              builder: (_) => const OrderTrackingScreen(),
+              settings: RouteSettings(name: path, arguments: Uri.splitQueryString(query)),
             );
           }
 
-          if (settings.name != null && settings.name!.startsWith('/orders/')) {
-            final id = settings.name!.split('/').last;
+          final builder = appRoutes[path];
+          if (builder != null) {
+            return MaterialPageRoute(
+              builder: builder,
+              settings: RouteSettings(name: path, arguments: settings.arguments),
+            );
+          }
+
+          if (path.startsWith('/product/')) {
+            final id = path.split('/').last;
+            return MaterialPageRoute(
+              builder: (_) => ProductDetailScreen(productId: id),
+              settings: RouteSettings(name: path),
+            );
+          }
+
+          if (path.startsWith('/orders/')) {
+            final id = path.split('/').last;
             if (id != 'track') {
               return MaterialPageRoute(
                 builder: (_) => const OrderDetailScreen(),
-                settings: RouteSettings(name: settings.name, arguments: id),
+                settings: RouteSettings(name: path, arguments: id),
               );
             }
           }

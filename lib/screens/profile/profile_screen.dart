@@ -131,7 +131,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         onPressed: () => Navigator.of(context).pushNamed('/admin/dashboard'),
                       ),
                     ),
-                  if (role == 'business' || (user?.businessId ?? '').isNotEmpty)
+                  if (role == 'business' ||
+                      (user?.businessId ?? '').isNotEmpty ||
+                      role == 'admin' ||
+                      role == 'superadmin')
                     _buildSuiteCard(
                       title: 'Business Suite',
                       subtitle: 'FINANCE & ANALYTICS',

@@ -328,6 +328,26 @@ class AdminProvider extends ChangeNotifier {
     }
   }
 
+  /// Creates a staff account (superadmin: admins by phone). Throws on failure
+  /// so the caller can toast the exact server message (e.g. "phone exists").
+  Future<void> createUser({
+    required String phone,
+    String? name,
+    String role = 'admin',
+  }) async {
+    try {
+      await ApiClient.instance.post('/api/admin/users', body: {
+        'phone': phone,
+        if (name != null && name.isNotEmpty) 'name': name,
+        'role': role,
+      });
+      await loadUsers();
+    } catch (e) {
+      debugPrint('Create user failed: $e');
+      rethrow;
+    }
+  }
+
   Future<void> refreshAll() async {
     _loading = true;
     notifyListeners();

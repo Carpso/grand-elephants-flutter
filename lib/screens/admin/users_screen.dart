@@ -5,6 +5,7 @@ import 'package:grand_elephants/models/user.dart';
 import 'package:grand_elephants/providers/admin_provider.dart';
 import 'package:grand_elephants/providers/auth_provider.dart';
 import 'package:grand_elephants/widgets/soft_card.dart';
+import 'package:grand_elephants/widgets/soft_input.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 
 class UsersScreen extends StatefulWidget {
@@ -93,6 +94,85 @@ class _UsersScreenState extends State<UsersScreen> {
     }
   }
 
+  /// Superadmin invite: creates an admin (or superadmin) account by phone —
+  /// the server validates permissions and the new code gets an SMS.
+  Future<void> _inviteUser() async {
+    final auth = context.read<AuthProvider>();
+    final messenger = ToastProvider.of(context);
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    final roles = ['admin', if (auth.role == 'superadmin') 'superadmin'];
+    var role = roles.first;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Add Staff Account'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'They sign in with their phone number — an invite SMS is sent automatically.',
+                style: TextStyle(fontSize: 12, color: AppColors.brandMuted),
+              ),
+              const SizedBox(height: 12),
+              SoftInput(label: 'Phone Number', hint: '0977123456', keyboardType: TextInputType.phone, controller: phoneController),
+              const SizedBox(height: 8),
+              SoftInput(label: 'Name', hint: 'e.g. Mary', controller: nameController),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: role,
+                decoration: const InputDecoration(labelText: 'Role'),
+                items: roles
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r.toUpperCase())))
+                    .toList(),
+                onChanged: (v) => setState(() => role = v ?? roles.first),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Add'),
+            ),
+          ],
+        ),
+      ),
+    );
+    final phone = phoneController.text.trim();
+    final name = nameController.text.trim();
+    nameController.dispose();
+    phoneController.dispose();
+    if (confirmed != true || !mounted) return;
+
+    if (phone.isEmpty) {
+      messenger.show('Phone number is required', ToastType.error);
+      return;
+    }
+    try {
+      await context.read<AdminProvider>().createUser(
+            phone: phone,
+            name: name,
+            role: role,
+          );
+      if (mounted) {
+        messenger.show(
+          '${name.isEmpty ? phone : name} added as $role',
+          ToastType.success,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final admin = context.watch<AdminProvider>();
@@ -106,7 +186,19 @@ class _UsersScreenState extends State<UsersScreen> {
             .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('User Management')),
+      appBar: AppBar(
+        title: const Text('User Management'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: IconButton(
+              icon: const Icon(Icons.person_add, size: 22),
+              tooltip: 'Add staff account',
+              onPressed: _inviteUser,
+            ),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Padding(

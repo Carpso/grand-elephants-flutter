@@ -60,14 +60,25 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
     } catch (e) {
       final message =
           '$e'.replaceFirst('Exception: ', '').replaceFirst('ApiException: ', '');
-      if (mounted) _error = message;
+      if (mounted) _error = _friendly(message);
       if (showErrors && mounted) {
-        ToastProvider.of(context).show(message, ToastType.error);
+        ToastProvider.of(context).show(_friendly(message), ToastType.error);
       }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
+
+  /// Rewrites backend scope errors into an actionable message for sellers.
+  static String _friendly(String message) {
+    if (message.toLowerCase().contains('no business')) {
+      return 'You do not have a business yet — apply to become a seller to start selling.';
+    }
+    return message;
+  }
+
+  bool get _needsBusiness =>
+      (_error ?? '').toLowerCase().contains('business');
 
   double get _revenue => _orders.fold(0.0, (sum, o) => sum + o.total);
   double get _balance => ((_business['balanceCents'] as num?)?.toInt() ?? 0) / 100;
@@ -275,6 +286,17 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
                 style: const TextStyle(color: AppColors.brandMuted),
               ),
               const SizedBox(height: 16),
+              if (_needsBusiness) ...[
+                Center(
+                  child: SoftButton(
+                    title: 'Apply to Become a Seller',
+                    variant: SoftButtonVariant.primary,
+                    onPressed: () =>
+                        Navigator.of(context).pushNamed('/business/apply'),
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               Center(
                 child: TextButton(
                   onPressed: _retry,
@@ -454,6 +476,28 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
                 children: [
                   Expanded(
                     child: _ActionTile(
+                      icon: Icons.inventory_2,
+                      label: 'Manage Products',
+                      onTap: () => Navigator.of(context)
+                          .pushNamed('/business/products'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _ActionTile(
+                      icon: Icons.groups,
+                      label: 'Manage Staff',
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/business/staff'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: _ActionTile(
                       icon: Icons.account_balance,
                       label: 'Taxes',
                       onTap: () =>
@@ -467,6 +511,8 @@ class _BusinessHomeScreenState extends State<BusinessHomeScreen> {
                 children: [
                   Expanded(
                     child: SoftCard(
+                      onTap: () =>
+                          Navigator.of(context).pushNamed('/business/staff'),
                       child: Column(
                         children: [
                           const Text(

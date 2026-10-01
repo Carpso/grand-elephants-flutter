@@ -6,6 +6,7 @@ import 'package:grand_elephants/models/cart_item.dart';
 import 'package:grand_elephants/models/product.dart';
 import 'package:grand_elephants/providers/cart_provider.dart';
 import 'package:grand_elephants/providers/config_provider.dart';
+import 'package:grand_elephants/services/api_client.dart';
 import 'package:grand_elephants/services/receipt_service.dart';
 import 'package:grand_elephants/widgets/toast.dart';
 import 'package:grand_elephants/widgets/soft_button.dart';
@@ -38,6 +39,24 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         _order = order;
         _loading = false;
       });
+    }
+  }
+
+  /// Copies the server-signed tracking link (shareable with anyone).
+  Future<void> _shareTrackingLink(String orderId) async {
+    final messenger = ToastProvider.of(context);
+    try {
+      final res = await ApiClient.instance.get('/api/orders/$orderId/tracking-link');
+      final url = (res as Map)['url']?.toString();
+      if (url == null || url.isEmpty) throw Exception('Could not build the link');
+      await Clipboard.setData(ClipboardData(text: url));
+      if (mounted) {
+        messenger.show('Tracking link copied — paste it into a chat or SMS.', ToastType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger.show('$e'.replaceFirst('Exception: ', ''), ToastType.error);
+      }
     }
   }
 
@@ -154,6 +173,19 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         '/orders/track',
                         arguments: orderId,
                       ),
+                    ),
+                  ],
+                  if (order != null) ...[
+                    const SizedBox(height: 12),
+                    SoftButton(
+                      title: 'Share Tracking Link',
+                      variant: SoftButtonVariant.outline,
+                      icon: const Icon(
+                        Icons.share,
+                        size: 20,
+                        color: AppColors.brandPrimary,
+                      ),
+                      onPressed: () => _shareTrackingLink(orderId),
                     ),
                   ],
                   const SizedBox(height: 12),
