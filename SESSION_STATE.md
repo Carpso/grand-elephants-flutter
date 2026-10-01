@@ -59,3 +59,8 @@ Saved: 2026-10-01. Companion: same file in `grand-elephants-api`.
 - Flutter: `flutter analyze` (must be 0), `flutter test`, `flutter build web|apk|appbundle --release`
 - API: `npx tsc --noEmit`, `npx wrangler deploy`, `npx wrangler d1 execute grand-elephants-db --remote --command "..."` (`--remote` mandatory — bare command runs against LOCAL `.wrangler/state` and shows empty tables)
 - Website deploy = build web then `npx wrangler deploy` (worker serves `../grand-elephants-flutter/build/web`).
+
+## 2026-10-01 foreign deployer = Cloudflare Workers Builds — DELETED
+- A Workers Builds trigger (created 2026-09-23) watched **this repo's `main`** and ran `npx wrangler deploy` in CI. Repo has no wrangler config → wrangler wizard auto-generated an **assets-only** config → every flutter push overwrote the API worker within 24–86 s (assets-only 404 + secrets wiped; strikes 05:41/06:41/07:42/07:49 Z on 10-01, plus 09-25/09-27).
+- **Trigger deleted 2026-10-01** (Builds API `DELETE /builds/triggers/…` → count=0). Pushes to this repo no longer deploy anything.
+- **Never add a `wrangler deploy` CI/Workers-Builds trigger for this repo** — website deploys happen from the API repo (`flutter build web` + `npx wrangler deploy` there). Full forensics in api `SESSION_STATE.md`.
