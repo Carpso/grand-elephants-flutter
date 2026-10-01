@@ -1,6 +1,6 @@
 # SESSION_STATE — Grand Elephants (Flutter app)
 
-Saved: 2026-09-30. Companion: same file in `grand-elephants-api`.
+Saved: 2026-10-01. Companion: same file in `grand-elephants-api`.
 
 ## Project identity
 - Product: **Grand Elephants** — bags-only marketplace ("Move With Conviction")
@@ -11,12 +11,15 @@ Saved: 2026-09-30. Companion: same file in `grand-elephants-api`.
 - Worker/site: `https://grand-elephants-api.godfreymoseskalambo.workers.dev`
 - D1: `grand-elephants-db` (id `447d1f6c-1b73-4bfd-bea5-3747460acdfc`) — 25 tables, bag seed applied
 - Wrangler auth: OAuth in `C:\Users\User\AppData\Roaming\xdg.config\.wrangler\config\default.toml` — run `npx wrangler` WITHOUT `CLOUDFLARE_API_TOKEN` env (that token lacks workers:edit). Account `ab82a97ce2c926279c483fef36c41945`.
-- Secrets on worker (set 2026-09-30, 7/7): `AT_API_KEY` (PRODUCTION, from `OneDrive\Documents\Settings - API Key.txt`), `JWT_SECRET` (`Temp\opencode\jwt_secret.txt`), `LIPILA_API_KEY` (from `OneDrive\Documents\lsk_019fc62a-10c9-726a-82ff-03bfdee.txt` line 0 first token — prod `lsk_…`, verified balance 200), `LIPILA_WEBHOOK_SECRET` (`Temp\opencode\webhook_secret.txt`), `SUPERADMIN_PHONES=+260968551110`, `FIREBASE_PRIVATE_KEY`/`FIREBASE_CLIENT_EMAIL` (`Temp\opencode\firebase_key.pem`).
+- Secrets on worker (set 2026-09-30, 7/7): `AT_API_KEY` (PRODUCTION, from `OneDrive\Documents\Settings - API Key.txt`), `JWT_SECRET` (`Temp\opencode\jwt_secret.txt`), `LIPILA_API_KEY` (GE merchant key from `OneDrive\Documents\Grand Elephants Lipila key.txt`, wallet 98462 — the old `lsk_019fc62a…` "kingdom sponsor" key is BANNED, see api SESSION_STATE), `LIPILA_WEBHOOK_SECRET` (`Temp\opencode\webhook_secret.txt`), `SUPERADMIN_PHONES=+260968551110`, `FIREBASE_PRIVATE_KEY`/`FIREBASE_CLIENT_EMAIL` (`Temp\opencode\firebase_key.pem`).
 - SMS: Africa's Talking **production** (`api.africastalking.com`, username `ChurchOnApp`, sender **Carpso** approved, brand `GRANDELEPHANTS:`). `AT_SANDBOX=false` in wrangler.toml. NOTE: keys are environment-specific — sandbox keys 401 on prod host.
 - GitHub: remotes `Carpso/grand-elephants-flutter` (branch **main**) and `Carpso/grand-elephants-api` (branch **master**); push via `git push https://Carpso:<PAT>@github.com/...` (PAT in credential history — `ghp_efe3...`).
 - R2: bucket `choa-sermons-vault`, SigV4 script `C:\Users\User\AppData\Local\Temp\opencode\upload_r2.ps1 -Bucket "choa-sermons-vault"` → `https://media.churchonapp.com/grand-elephants/grand-elephants.apk|.aab`.
 - Maps: `https://maps.churchonapp.com/zambia.pmtiles` (PMTiles, OSM fallback).
 - Firebase project `grand-elephants-b8ec4`; google-services.json in android/app.
+
+## Done this session (2026-10-01, pushed)
+- **Fee display for the new buyer-borne platform fee model** (backend change in api repo, deploy `340e4a58`): `ConfigProvider` parses feeInfo `momoFeePct|momoFeeMinCents|cardFeePct|cardFeeMinCents` → getters `paymentFeePct`(3.5)/`paymentFeeMin`(K3)/`cardPaymentFeePct`(4.5)/`cardPaymentFeeMin`(K5); checkout fee texts now state the payment fee ("Payment fee 3.5% (min K3) for MoMo or 4.5% (min K5) for card" + final-total line); Finance screen loads current values from `GET /api/admin/settings` (falls back to defaults), adds inputs Platform Fee %, Platform Min Fee (K), Card Fee %, Card Min Fee (K), Payout Fee % → PATCHes the 5 `platform_*` keys (cents for the K fields), stat tile renamed `PLATFORM COMMISSION` → `PLATFORM FEES`. Gates: analyze 0, tests 13/13.
 
 ## Done this session (2026-09-30, pushed)
 - Admin/Lipila/FX batch across **14 Flutter files** + backend (`src/index.ts`, `src/lipila.ts`); deployed worker+web as `bd203e65`. Gates: analyze 0, tests 13/13 (tests print harmless "Binding has not yet been initialized"), tsc 0.
