@@ -263,7 +263,11 @@ class SellOnApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
-        themeMode: ThemeMode.system,
+        // The design language is light-first with hardcoded AppColors
+        // (brandDark text on softSurface, white SoftCards). Following the
+        // system dark preference renders black-on-black and white-on-white
+        // text, so the app pins light until screens are theme-aware.
+        themeMode: ThemeMode.light,
         initialRoute: '/splash',
         onGenerateRoute: (settings) {
           // Hash-links can carry a query (e.g. /orders/track?orderId=..&sig=..).
